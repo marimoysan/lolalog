@@ -21,8 +21,8 @@ export const PAIN_LEVELS: {
 export const NO_PAIN = {
   Icon: Laugh,
   label: "Sin dolor",
-  textClass: "text-green-600",
-  bgClass: "bg-green-500/15",
+  textClass: "text-brand-green",
+  bgClass: "bg-brand-green/10",
 };
 
 export function painLevelInfo(level: PainLevel) {

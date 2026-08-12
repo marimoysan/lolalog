@@ -18,7 +18,7 @@ export function ChoiceGroup<T extends string>({
           onClick={() => onChange(option.value)}
           className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
             value === option.value
-              ? "border-foreground bg-foreground text-background"
+              ? "border-brand-green bg-brand-green text-white"
               : "border-neutral-700 text-neutral-400"
           }`}
         >

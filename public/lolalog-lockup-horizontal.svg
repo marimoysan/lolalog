@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="176" viewBox="0 0 400 176" role="img" aria-label="LolaLog">
+  <title>LolaLog</title>
+  <rect x="0" y="32" width="112" height="112" rx="30" fill="#0F6E56"/>
+  <circle cx="25.5" cy="57.5" r="8" fill="#FFFFFF"/>
+  <circle cx="56" cy="57.5" r="8" fill="#FFFFFF"/>
+  <circle cx="86.5" cy="57.5" r="8" fill="#FFFFFF"/>
+  <circle cx="25.5" cy="88" r="8" fill="#FFFFFF"/>
+  <circle cx="56" cy="88" r="8" fill="#FFFFFF"/>
+  <circle cx="86.5" cy="88" r="8" fill="#F0997B"/>
+  <circle cx="25.5" cy="118.5" r="8" fill="#FFFFFF"/>
+  <circle cx="56" cy="118.5" r="8" fill="#FFFFFF"/>
+  <circle cx="86.5" cy="118.5" r="8" fill="#FFFFFF"/>
+  <text x="140" y="88" font-family="Inter, 'Helvetica Neue', Arial, sans-serif" font-size="54" font-weight="500" fill="#1F1F1D" dominant-baseline="central">Lola<tspan fill="#1D9E75">Log</tspan></text>
+</svg>

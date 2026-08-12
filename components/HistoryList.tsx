@@ -32,7 +32,7 @@ export function HistoryList({ days }: { days: string[] }) {
           <Link
             key={date}
             href={`/history/${date}`}
-            className="flex items-center justify-between rounded-lg border border-neutral-800 px-4 py-3 text-sm text-foreground no-underline"
+            className="flex items-center justify-between rounded-xl border border-neutral-800 px-4 py-3 text-sm text-foreground no-underline transition-colors hover:border-brand-green/40"
           >
             <span className="capitalize">{formatDisplayDate(date)}</span>
             <EntryStatus entry={entry} />

@@ -1,12 +1,12 @@
 {
-  "name": "lolalog",
-  "short_name": "lolalog",
+  "name": "LolaLog",
+  "short_name": "LolaLog",
   "description": "Diario personal de síntomas",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#0a0a0a",
+  "background_color": "#0F6E56",
+  "theme_color": "#0F6E56",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+    { "src": "/lolalog-icono-1024.svg", "sizes": "any", "type": "image/svg+xml" }
   ]
 }

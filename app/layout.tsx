@@ -15,13 +15,19 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "lolalog",
+  title: "LolaLog",
   description: "Diario personal de síntomas",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/lolalog-icono-1024.svg",
+    shortcut: "/lolalog-icono-1024.svg",
+    apple: "/lolalog-icono-1024.svg",
+  },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  themeColor: "#0F6E56",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -30,7 +36,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="flex min-h-dvh flex-col" suppressHydrationWarning>
         <EntriesProvider>
           <PinGate>{children}</PinGate>
         </EntriesProvider>

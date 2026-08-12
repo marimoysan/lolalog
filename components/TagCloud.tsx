@@ -20,7 +20,7 @@ export function TagCloud({
             onClick={() => onToggle(tag)}
             className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
               active
-                ? "border-foreground bg-foreground text-background"
+                ? "border-brand-green bg-brand-green text-white"
                 : "border-neutral-700 text-neutral-400"
             }`}
           >

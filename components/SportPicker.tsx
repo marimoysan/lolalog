@@ -29,7 +29,7 @@ export function SportPicker({
       {value.map((sport) => (
         <div
           key={sport.id}
-          className="flex flex-col gap-2 rounded-lg border border-neutral-800 p-3"
+          className="flex flex-col gap-2 rounded-xl border border-neutral-800 p-3"
         >
           <div className="flex items-center gap-2">
             <select

@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sleep 3 && cat /tmp/lolalog-dev.log)",
+      "Read(//tmp/**)",
+      "Bash(sleep 5 && cat /tmp/lolalog-dev.log)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/history)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/dashboard)"
+    ]
+  }
+}

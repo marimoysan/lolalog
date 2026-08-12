@@ -2,12 +2,18 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #1f1f1d;
+  --brand-green: #0f6e56;
+  --brand-green-light: #1d9e75;
+  --brand-coral: #f0997b;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-brand-green: var(--brand-green);
+  --color-brand-green-light: var(--brand-green-light);
+  --color-brand-coral: var(--brand-coral);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }

@@ -23,7 +23,7 @@ export function ScaleInput({
           aria-label={`${ariaLabelPrefix} ${level}`}
           className={`flex h-9 w-9 items-center justify-center rounded-full border text-sm transition-colors ${
             value === level
-              ? "border-foreground bg-foreground font-medium text-background"
+              ? "border-brand-green bg-brand-green font-medium text-white"
               : "border-neutral-700 text-neutral-400"
           }`}
         >

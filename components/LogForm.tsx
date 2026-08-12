@@ -120,7 +120,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
         <button
           type="button"
           onClick={startEdit}
-          className="mt-2 rounded-lg border border-neutral-700 px-4 py-2 text-sm"
+          className="mt-2 rounded-xl border border-neutral-700 px-4 py-2 text-sm"
         >
           Editar
         </button>
@@ -142,7 +142,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
           }}
           className={`flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm transition-colors ${
             painLevel === 0
-              ? `border-green-600 ${NO_PAIN.bgClass} ${NO_PAIN.textClass}`
+              ? `border-brand-green ${NO_PAIN.bgClass} ${NO_PAIN.textClass}`
               : "border-neutral-700 text-neutral-500"
           }`}
         >
@@ -224,7 +224,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
         type="button"
         onClick={handleSubmit}
         disabled={painLevel === null}
-        className="rounded-lg bg-foreground py-3 text-center text-sm font-medium text-background disabled:opacity-40"
+        className="rounded-xl bg-brand-green py-3 text-center text-sm font-medium text-white disabled:opacity-40"
       >
         Guardar
       </button>
