@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { useEntries } from "@/lib/db/entries-store";
 import { DateHeader } from "@/components/DateHeader";
 import { PainScale } from "@/components/PainScale";
@@ -33,10 +36,13 @@ const YES_NO = [
 ] as const;
 
 export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
+  const router = useRouter();
   const { getEntry, saveEntry, deleteEntry } = useEntries();
   const existing = getEntry(date);
 
-  const [editing, setEditing] = useState(!existing);
+  // History days skip the "already registered" summary screen and open
+  // straight into the editable form; only today keeps that intermediate step.
+  const [editing, setEditing] = useState(!existing || !isToday);
   const [painLevel, setPainLevel] = useState<PainLevel | null>(
     existing?.painLevel ?? null,
   );
@@ -64,13 +70,23 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
   );
   const [foodTags, setFoodTags] = useState<string[]>(existing?.food.tags ?? []);
 
+  // Today stays on the page and flips to the celebration screen; any other
+  // day (opened from Historial) always returns to the home/today screen.
+  function finishEditing() {
+    if (isToday) {
+      setEditing(false);
+    } else {
+      router.push("/");
+    }
+  }
+
   function handleSubmit() {
     if (painLevel === null) {
       // Blank pain level on a day that already had an entry means "Vaciar
       // todo" was used: save-as-blank is how you return a day to unlogged.
       if (existing) {
         deleteEntry(date);
-        setEditing(false);
+        finishEditing();
       }
       return;
     }
@@ -85,7 +101,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
       sex: sex === "si",
       food: { quantity: foodQuantity, quality: foodQuality, tags: foodTags },
     });
-    setEditing(false);
+    finishEditing();
   }
 
   function clearAll() {
@@ -130,14 +146,14 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
     );
   }
 
+  // Only reachable for today: history days always start with editing=true
+  // and finishEditing() navigates away from them instead of clearing it.
   if (existing && !editing) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-        <DateHeader date={date} />
+        <DateHeader date={date} isToday={isToday} />
         <p className="text-4xl">🎉</p>
-        <p className="text-neutral-500">
-          {isToday ? "Ya registraste hoy." : "Este día ya está registrado."}
-        </p>
+        <p className="text-neutral-500">Ya registraste hoy.</p>
         <button
           type="button"
           onClick={startEdit}
@@ -151,17 +167,28 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
-      {existing && !isToday && (
-        <button
-          type="button"
-          onClick={clearAll}
-          className="self-end rounded-xl border border-neutral-700 px-3 py-1.5 text-xs text-neutral-500"
-        >
-          Vaciar todo
-        </button>
+      {!isToday && (
+        <div className="flex items-center justify-between">
+          <Link
+            href="/history"
+            className="flex items-center gap-1 text-xs text-neutral-500 no-underline"
+          >
+            <ArrowLeft size={14} strokeWidth={1.75} />
+            Historial
+          </Link>
+          {existing && (
+            <button
+              type="button"
+              onClick={clearAll}
+              className="rounded-xl border border-neutral-700 px-3 py-1.5 text-xs text-neutral-500"
+            >
+              Vaciar todo
+            </button>
+          )}
+        </div>
       )}
 
-      <DateHeader date={date} />
+      <DateHeader date={date} isToday={isToday} />
 
       <div className="flex flex-col items-center gap-3">
         <PainScale value={painLevel} onChange={setPainLevel} />

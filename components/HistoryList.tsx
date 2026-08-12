@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEntries } from "@/lib/db/entries-store";
-import { formatDisplayDate } from "@/lib/date";
+import { formatDisplayDate, todayISO } from "@/lib/date";
 import { painLevelInfo } from "@/lib/pain-scale";
 import type { DailyEntry } from "@/lib/types";
 
@@ -22,6 +22,7 @@ function EntryStatus({ entry }: { entry: DailyEntry | undefined }) {
 
 export function HistoryList({ days }: { days: string[] }) {
   const { getEntry } = useEntries();
+  const today = todayISO();
 
   return (
     <div className="flex flex-1 flex-col gap-2 p-4">
@@ -31,7 +32,7 @@ export function HistoryList({ days }: { days: string[] }) {
         return (
           <Link
             key={date}
-            href={`/history/${date}`}
+            href={date === today ? "/" : `/history/${date}`}
             className="flex items-center justify-between rounded-xl border border-neutral-800 px-4 py-3 text-sm text-foreground no-underline transition-colors hover:border-brand-green/40"
           >
             <span className="capitalize">{formatDisplayDate(date)}</span>
