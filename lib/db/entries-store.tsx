@@ -6,6 +6,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { getDb, persist } from "@/lib/db/client";
 import { getAllEntries, initDailyLogSchema, upsertEntry } from "@/lib/db/daily-log";
+import { syncOnLoad, syncPush } from "@/lib/sync/sync";
 import type { DailyEntry } from "@/lib/types";
 
 type EntriesContextValue = {
@@ -25,6 +26,15 @@ export function EntriesProvider({ children }: { children: ReactNode }) {
       initDailyLogSchema(db);
       setEntries(getAllEntries(db));
       setReady(true);
+
+      // Runs after setReady(true): never blocks first paint or offline use.
+      syncOnLoad(db)
+        .then((result) => {
+          if (result.ok && result.appliedCount > 0) {
+            setEntries((prev) => ({ ...prev, ...result.entries }));
+          }
+        })
+        .catch(() => {});
     })();
   }, []);
 
@@ -36,8 +46,9 @@ export function EntriesProvider({ children }: { children: ReactNode }) {
     setEntries((prev) => ({ ...prev, [entry.date]: entry }));
     (async () => {
       const db = await getDb();
-      upsertEntry(db, entry);
+      const updatedAt = upsertEntry(db, entry);
       await persist();
+      syncPush(entry, updatedAt).catch(() => {});
     })();
   }
 

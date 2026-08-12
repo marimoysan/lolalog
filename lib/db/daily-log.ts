@@ -59,7 +59,14 @@ export function getAllEntries(db: Database): Record<string, DailyEntry> {
   return entries;
 }
 
-export function upsertEntry(db: Database, entry: DailyEntry): void {
+// updatedAt defaults to now, but sync passes the remote's own timestamp when
+// applying a pulled row — otherwise every merge would re-stamp "now" and
+// make the local copy look newer than the server on the very next sync.
+export function upsertEntry(
+  db: Database,
+  entry: DailyEntry,
+  updatedAt: string = new Date().toISOString(),
+): string {
   db.run(
     `INSERT OR REPLACE INTO daily_log
       (date, pain_level, pain_locations, activity_level, lie_down_need,
@@ -77,7 +84,20 @@ export function upsertEntry(db: Database, entry: DailyEntry): void {
       entry.food.quantity,
       entry.food.quality,
       JSON.stringify(entry.food.tags),
-      new Date().toISOString(),
+      updatedAt,
     ],
   );
+  return updatedAt;
+}
+
+export function getUpdatedAtMap(db: Database): Record<string, string> {
+  const result = db.exec("SELECT date, updated_at FROM daily_log");
+  const map: Record<string, string> = {};
+  if (result.length === 0) return map;
+
+  const { values } = result[0];
+  for (const [date, updatedAt] of values) {
+    map[date as string] = updatedAt as string;
+  }
+  return map;
 }

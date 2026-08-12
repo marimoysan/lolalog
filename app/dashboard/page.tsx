@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function DashboardPage() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
@@ -5,6 +7,9 @@ export default function DashboardPage() {
       <p className="text-neutral-500">
         Próximamente — el análisis se hace en Python sobre los datos en bruto.
       </p>
+      <Link href="/sync" className="mt-4 text-sm text-neutral-500 underline">
+        Configurar sincronización
+      </Link>
     </div>
   );
 }
