@@ -12,7 +12,9 @@ const CANARY_KEY = "lolalog:canary";
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_BLOB_SIZE = 50_000;
 
-type StoredEntry = { updatedAt: string; iv: string; ciphertext: string };
+type StoredEntry =
+  | { updatedAt: string; iv: string; ciphertext: string; deleted?: false }
+  | { updatedAt: string; deleted: true };
 
 function unauthorized() {
   return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -38,16 +40,23 @@ export async function POST(request: Request) {
   if (!requireToken(request)) return unauthorized();
 
   const body = (await request.json()) as Partial<RemoteRow>;
-  const valid =
+  const baseValid =
     typeof body.date === "string" &&
     DATE_RE.test(body.date) &&
     typeof body.updatedAt === "string" &&
-    !Number.isNaN(Date.parse(body.updatedAt)) &&
-    typeof body.iv === "string" &&
-    body.iv.length > 0 &&
-    typeof body.ciphertext === "string" &&
-    body.ciphertext.length > 0 &&
-    body.ciphertext.length <= MAX_BLOB_SIZE;
+    !Number.isNaN(Date.parse(body.updatedAt));
+
+  const isDelete = body.deleted === true;
+  // A tombstone carries no content, so it skips the iv/ciphertext checks
+  // that every real entry still has to pass.
+  const valid =
+    baseValid &&
+    (isDelete ||
+      (typeof body.iv === "string" &&
+        body.iv.length > 0 &&
+        typeof body.ciphertext === "string" &&
+        body.ciphertext.length > 0 &&
+        body.ciphertext.length <= MAX_BLOB_SIZE));
 
   if (!valid) return NextResponse.json({ error: "invalid body" }, { status: 400 });
   const row = body as RemoteRow;
@@ -60,8 +69,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ applied: false });
   }
 
-  await redis.hset(ENTRIES_KEY, {
-    [row.date]: { updatedAt: row.updatedAt, iv: row.iv, ciphertext: row.ciphertext },
-  });
+  const stored: StoredEntry = isDelete
+    ? { updatedAt: row.updatedAt, deleted: true }
+    : { updatedAt: row.updatedAt, iv: row.iv!, ciphertext: row.ciphertext! };
+
+  await redis.hset(ENTRIES_KEY, { [row.date]: stored });
   return NextResponse.json({ applied: true });
 }

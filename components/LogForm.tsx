@@ -33,7 +33,7 @@ const YES_NO = [
 ] as const;
 
 export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
-  const { getEntry, saveEntry } = useEntries();
+  const { getEntry, saveEntry, deleteEntry } = useEntries();
   const existing = getEntry(date);
 
   const [editing, setEditing] = useState(!existing);
@@ -65,7 +65,15 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
   const [foodTags, setFoodTags] = useState<string[]>(existing?.food.tags ?? []);
 
   function handleSubmit() {
-    if (painLevel === null) return;
+    if (painLevel === null) {
+      // Blank pain level on a day that already had an entry means "Vaciar
+      // todo" was used: save-as-blank is how you return a day to unlogged.
+      if (existing) {
+        deleteEntry(date);
+        setEditing(false);
+      }
+      return;
+    }
     saveEntry({
       date,
       painLevel,
@@ -78,6 +86,19 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
       food: { quantity: foodQuantity, quality: foodQuality, tags: foodTags },
     });
     setEditing(false);
+  }
+
+  function clearAll() {
+    setPainLevel(null);
+    setPainLocations([]);
+    setActivityLevel(null);
+    setLieDownNeed(null);
+    setSports([]);
+    setPeriod(null);
+    setSex(null);
+    setFoodQuantity(null);
+    setFoodQuality(null);
+    setFoodTags([]);
   }
 
   function startEdit() {
@@ -130,6 +151,16 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
+      {existing && !isToday && (
+        <button
+          type="button"
+          onClick={clearAll}
+          className="self-end rounded-xl border border-neutral-700 px-3 py-1.5 text-xs text-neutral-500"
+        >
+          Vaciar todo
+        </button>
+      )}
+
       <DateHeader date={date} />
 
       <div className="flex flex-col items-center gap-3">
@@ -223,7 +254,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
       <button
         type="button"
         onClick={handleSubmit}
-        disabled={painLevel === null}
+        disabled={painLevel === null && !existing}
         className="rounded-xl bg-brand-green py-3 text-center text-sm font-medium text-white disabled:opacity-40"
       >
         Guardar

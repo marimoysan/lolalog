@@ -28,15 +28,16 @@ llamadas a servicios de terceros que reciban estos datos en claro.
   arrays/objetos (`painLocations`, `sports`, `food.tags`) se guardan como TEXT
   con JSON. Incluye `updated_at` desde ya, aunque nada lo usa todavía, porque
   el futuro sync (ver debajo) lo necesita para el upsert.
-- **Sync (fase 2, implementado)**: relay cifrado end-to-end sobre Upstash
-  Redis (Vercel Marketplace) — el servidor nunca descifra el contenido del
-  diario, solo `date`/`updated_at` en claro para arbitrar el upsert last-write-wins.
-  Automático (push en cada `saveEntry`, pull+merge al abrir la app), sin
-  botón manual ni polling. Configuración de passphrase + token una vez por
-  dispositivo en `/sync`. Detalle completo en [lib/sync/README.md](lib/sync/README.md).
-  Requiere setup manual en el dashboard de Vercel (integración Upstash +
-  `SYNC_API_TOKEN`) antes de poder usarse — sin eso, el sync es un no-op
-  silencioso y la app sigue funcionando 100% local.
+- **Sync (fase 2, implementado y en uso)**: relay cifrado end-to-end sobre
+  Upstash Redis (Vercel Marketplace) — el servidor nunca descifra el
+  contenido del diario, solo `date`/`updated_at` en claro para arbitrar el
+  upsert last-write-wins. Automático (push en cada `saveEntry`, pull+merge al
+  abrir la app), sin botón manual ni polling. Configuración de passphrase +
+  token una vez por dispositivo en `/sync`. Detalle completo en
+  [lib/sync/README.md](lib/sync/README.md), incluidos los nombres reales de
+  las env vars de Redis (namespaced bajo `lolalog_` en este proyecto, no los
+  genéricos `UPSTASH_REDIS_REST_*`). Confirmado funcionando entre dos
+  dispositivos reales (móvil + desktop).
 - **Análisis y gráficas**: hoy fuera de la app (datos en bruto vía
   `pandas.read_sql` en Python). En discusión para un Dashboard con gráficas
   reales *dentro* de la app — si se construye, tiene que ser client-side
@@ -46,17 +47,17 @@ llamadas a servicios de terceros que reciban estos datos en claro.
   sin que se pida explícitamente — sigue siendo la regla hasta que se decida
   esto como plan aparte.
 
-## Estado actual: SQLite + sync implementados
+## Estado actual: SQLite + sync funcionando en producción
 
 Los datos se guardan de verdad: `EntriesProvider`/`useEntries`
 ([lib/db/entries-store.tsx](lib/db/entries-store.tsx)) leen y escriben en la
 tabla `daily_log` vía sql.js, y persisten en IndexedDB (sobreviven a recargar
-y cerrar el navegador). No hay seed de datos de ejemplo — la tabla empieza
-vacía por dispositivo. El sync entre dispositivos (ver "Sync" arriba) está
-implementado en código; falta el setup manual en Vercel (integración Upstash
-+ `SYNC_API_TOKEN`) y configurar `/sync` en cada dispositivo antes de que
-haga algo. El siguiente paso grande, todavía sin decidir, es si el Dashboard
-pasa a tener gráficas reales dentro de la app (ver "Análisis y gráficas").
+y cerrar el navegador). No hay seed de datos de ejemplo — cada dispositivo
+empieza con la tabla vacía y se llena vía uso normal + sync. El sync entre
+dispositivos (ver "Sync" arriba) está desplegado y configurado — probado de
+verdad entre móvil y desktop. El siguiente paso grande, todavía sin decidir,
+es si el Dashboard pasa a tener gráficas reales dentro de la app (ver
+"Análisis y gráficas").
 
 ### Pantallas construidas
 

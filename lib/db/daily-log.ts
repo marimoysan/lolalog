@@ -21,9 +21,18 @@ export function initDailyLogSchema(db: Database): void {
       food_quantity TEXT,
       food_quality TEXT,
       food_tags TEXT NOT NULL DEFAULT '[]',
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      deleted INTEGER NOT NULL DEFAULT 0
     )
   `);
+
+  // Devices with a DB created before "deleted" existed: CREATE TABLE IF NOT
+  // EXISTS above is a no-op for them, so add the column here.
+  const tableInfo = db.exec("PRAGMA table_info(daily_log)");
+  const hasDeletedColumn = tableInfo[0]?.values.some((row) => row[1] === "deleted");
+  if (!hasDeletedColumn) {
+    db.exec("ALTER TABLE daily_log ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0");
+  }
 }
 
 function rowToEntry(row: Record<string, unknown>): DailyEntry {
@@ -45,7 +54,7 @@ function rowToEntry(row: Record<string, unknown>): DailyEntry {
 }
 
 export function getAllEntries(db: Database): Record<string, DailyEntry> {
-  const result = db.exec("SELECT * FROM daily_log");
+  const result = db.exec("SELECT * FROM daily_log WHERE deleted = 0");
   const entries: Record<string, DailyEntry> = {};
   if (result.length === 0) return entries;
 
@@ -90,14 +99,35 @@ export function upsertEntry(
   return updatedAt;
 }
 
-export function getUpdatedAtMap(db: Database): Record<string, string> {
-  const result = db.exec("SELECT date, updated_at FROM daily_log");
-  const map: Record<string, string> = {};
+export type SyncState = { updatedAt: string; deleted: boolean };
+
+// Includes deleted (tombstoned) rows and their updated_at — sync needs both
+// to arbitrate last-write-wins and to know when a local row should push a
+// delete instead of the entry itself.
+export function getSyncState(db: Database): Record<string, SyncState> {
+  const result = db.exec("SELECT date, updated_at, deleted FROM daily_log");
+  const map: Record<string, SyncState> = {};
   if (result.length === 0) return map;
 
   const { values } = result[0];
-  for (const [date, updatedAt] of values) {
-    map[date as string] = updatedAt as string;
+  for (const [date, updatedAt, deleted] of values) {
+    map[date as string] = { updatedAt: updatedAt as string, deleted: Boolean(deleted) };
   }
   return map;
+}
+
+// Soft delete: marks the row instead of dropping it, so updated_at survives
+// for last-write-wins comparisons the same way a normal edit would.
+export function deleteEntry(
+  db: Database,
+  date: string,
+  updatedAt: string = new Date().toISOString(),
+): string {
+  db.run(
+    `INSERT INTO daily_log (date, pain_level, updated_at, deleted)
+     VALUES (?, 0, ?, 1)
+     ON CONFLICT(date) DO UPDATE SET updated_at = excluded.updated_at, deleted = 1`,
+    [date, updatedAt],
+  );
+  return updatedAt;
 }

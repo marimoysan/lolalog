@@ -1,7 +1,7 @@
 "use client";
 
 import type { Database } from "sql.js";
-import { getAllEntries, getUpdatedAtMap, upsertEntry } from "@/lib/db/daily-log";
+import { deleteEntry, getAllEntries, getSyncState, upsertEntry } from "@/lib/db/daily-log";
 import { persist } from "@/lib/db/client";
 import { decryptCanaryOk, decryptEntry, encryptCanary, encryptEntry } from "@/lib/sync/crypto";
 import { isSyncConfigured, loadKey } from "@/lib/sync/key-store";
@@ -15,6 +15,12 @@ export async function syncPush(entry: DailyEntry, updatedAt: string): Promise<vo
   if (!key) return;
   const blob = await encryptEntry(key, entry);
   await pushRemote({ date: entry.date, updatedAt, ...blob });
+}
+
+export async function syncPushDelete(date: string, updatedAt: string): Promise<void> {
+  if (!(await isSyncConfigured())) return;
+  if (!(await loadKey())) return;
+  await pushRemote({ date, updatedAt, deleted: true });
 }
 
 export async function syncOnLoad(db: Database): Promise<SyncResult> {
@@ -40,14 +46,20 @@ export async function syncOnLoad(db: Database): Promise<SyncResult> {
     if (!canaryOk) return { ok: false, reason: "wrong-passphrase" };
   }
 
-  const localUpdatedAt = getUpdatedAtMap(db);
+  const localState = getSyncState(db);
   const applied: Record<string, DailyEntry> = {};
+  const deletedDates: string[] = [];
 
   for (const row of remoteRows) {
-    const local = localUpdatedAt[row.date];
-    if (local && local >= row.updatedAt) continue;
+    const local = localState[row.date];
+    if (local && local.updatedAt >= row.updatedAt) continue;
+    if (row.deleted) {
+      deleteEntry(db, row.date, row.updatedAt);
+      deletedDates.push(row.date);
+      continue;
+    }
     try {
-      const entry = await decryptEntry(key, row.date, row);
+      const entry = await decryptEntry(key, row.date, { iv: row.iv!, ciphertext: row.ciphertext! });
       upsertEntry(db, entry, row.updatedAt);
       applied[row.date] = entry;
     } catch {
@@ -55,17 +67,21 @@ export async function syncOnLoad(db: Database): Promise<SyncResult> {
     }
   }
 
-  if (Object.keys(applied).length > 0) {
+  if (Object.keys(applied).length > 0 || deletedDates.length > 0) {
     await persist();
   }
 
-  const freshLocalUpdatedAt = getUpdatedAtMap(db);
+  const freshLocalState = getSyncState(db);
   const remoteUpdatedAt = new Map(remoteRows.map((row) => [row.date, row.updatedAt]));
   const allEntries = getAllEntries(db);
 
-  for (const [date, updatedAt] of Object.entries(freshLocalUpdatedAt)) {
+  for (const [date, { updatedAt, deleted }] of Object.entries(freshLocalState)) {
     const remote = remoteUpdatedAt.get(date);
     if (remote && remote >= updatedAt) continue;
+    if (deleted) {
+      await pushRemote({ date, updatedAt, deleted: true }).catch(() => {});
+      continue;
+    }
     const entry = allEntries[date];
     if (!entry) continue;
     const blob = await encryptEntry(key, entry);
@@ -76,5 +92,5 @@ export async function syncOnLoad(db: Database): Promise<SyncResult> {
     await pushCanary(await encryptCanary(key)).catch(() => {});
   }
 
-  return { ok: true, appliedCount: Object.keys(applied).length, entries: applied };
+  return { ok: true, appliedCount: Object.keys(applied).length, entries: applied, deletedDates };
 }

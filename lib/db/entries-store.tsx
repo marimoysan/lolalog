@@ -5,13 +5,19 @@
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { getDb, persist } from "@/lib/db/client";
-import { getAllEntries, initDailyLogSchema, upsertEntry } from "@/lib/db/daily-log";
-import { syncOnLoad, syncPush } from "@/lib/sync/sync";
+import {
+  deleteEntry as deleteEntryRow,
+  getAllEntries,
+  initDailyLogSchema,
+  upsertEntry,
+} from "@/lib/db/daily-log";
+import { syncOnLoad, syncPush, syncPushDelete } from "@/lib/sync/sync";
 import type { DailyEntry } from "@/lib/types";
 
 type EntriesContextValue = {
   getEntry: (date: string) => DailyEntry | undefined;
   saveEntry: (entry: DailyEntry) => void;
+  deleteEntry: (date: string) => void;
 };
 
 const EntriesContext = createContext<EntriesContextValue | null>(null);
@@ -30,9 +36,13 @@ export function EntriesProvider({ children }: { children: ReactNode }) {
       // Runs after setReady(true): never blocks first paint or offline use.
       syncOnLoad(db)
         .then((result) => {
-          if (result.ok && result.appliedCount > 0) {
-            setEntries((prev) => ({ ...prev, ...result.entries }));
-          }
+          if (!result.ok) return;
+          if (result.appliedCount === 0 && result.deletedDates.length === 0) return;
+          setEntries((prev) => {
+            const next = { ...prev, ...result.entries };
+            for (const date of result.deletedDates) delete next[date];
+            return next;
+          });
         })
         .catch(() => {});
     })();
@@ -52,10 +62,24 @@ export function EntriesProvider({ children }: { children: ReactNode }) {
     })();
   }
 
+  function deleteEntry(date: string) {
+    setEntries((prev) => {
+      const next = { ...prev };
+      delete next[date];
+      return next;
+    });
+    (async () => {
+      const db = await getDb();
+      const updatedAt = deleteEntryRow(db, date);
+      await persist();
+      syncPushDelete(date, updatedAt).catch(() => {});
+    })();
+  }
+
   if (!ready) return null;
 
   return (
-    <EntriesContext.Provider value={{ getEntry, saveEntry }}>
+    <EntriesContext.Provider value={{ getEntry, saveEntry, deleteEntry }}>
       {children}
     </EntriesContext.Provider>
   );
