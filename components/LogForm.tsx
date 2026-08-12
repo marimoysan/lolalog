@@ -1,0 +1,233 @@
+"use client";
+
+import { useState, type ReactNode } from "react";
+import { useEntries } from "@/lib/db/entries-store";
+import { DateHeader } from "@/components/DateHeader";
+import { PainScale } from "@/components/PainScale";
+import { ScaleInput } from "@/components/ScaleInput";
+import { ChoiceGroup } from "@/components/ChoiceGroup";
+import { TagCloud } from "@/components/TagCloud";
+import { SportPicker } from "@/components/SportPicker";
+import { NO_PAIN } from "@/lib/pain-scale";
+import { FOOD_TAGS, PAIN_LOCATIONS } from "@/lib/types";
+import type {
+  PainLevel,
+  ScaleLevel,
+  SportEntry,
+  FoodQuantity,
+  FoodQuality,
+} from "@/lib/types";
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="text-sm text-neutral-500">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+const YES_NO = [
+  { value: "si", label: "Sí" },
+  { value: "no", label: "No" },
+] as const;
+
+export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
+  const { getEntry, saveEntry } = useEntries();
+  const existing = getEntry(date);
+
+  const [editing, setEditing] = useState(!existing);
+  const [painLevel, setPainLevel] = useState<PainLevel | null>(
+    existing?.painLevel ?? null,
+  );
+  const [painLocations, setPainLocations] = useState<string[]>(
+    existing?.painLocations ?? [],
+  );
+  const [activityLevel, setActivityLevel] = useState<ScaleLevel | null>(
+    existing?.activityLevel ?? null,
+  );
+  const [lieDownNeed, setLieDownNeed] = useState<ScaleLevel | null>(
+    existing?.lieDownNeed ?? null,
+  );
+  const [sports, setSports] = useState<SportEntry[]>(existing?.sports ?? []);
+  const [period, setPeriod] = useState<"si" | "no" | null>(
+    existing ? (existing.period ? "si" : "no") : null,
+  );
+  const [sex, setSex] = useState<"si" | "no" | null>(
+    existing ? (existing.sex ? "si" : "no") : null,
+  );
+  const [foodQuantity, setFoodQuantity] = useState<FoodQuantity | null>(
+    existing?.food.quantity ?? null,
+  );
+  const [foodQuality, setFoodQuality] = useState<FoodQuality | null>(
+    existing?.food.quality ?? null,
+  );
+  const [foodTags, setFoodTags] = useState<string[]>(existing?.food.tags ?? []);
+
+  function handleSubmit() {
+    if (painLevel === null) return;
+    saveEntry({
+      date,
+      painLevel,
+      painLocations,
+      activityLevel,
+      lieDownNeed,
+      sports,
+      period: period === "si",
+      sex: sex === "si",
+      food: { quantity: foodQuantity, quality: foodQuality, tags: foodTags },
+    });
+    setEditing(false);
+  }
+
+  function startEdit() {
+    if (!existing) return;
+    setPainLevel(existing.painLevel);
+    setPainLocations(existing.painLocations);
+    setActivityLevel(existing.activityLevel);
+    setLieDownNeed(existing.lieDownNeed);
+    setSports(existing.sports);
+    setPeriod(existing.period ? "si" : "no");
+    setSex(existing.sex ? "si" : "no");
+    setFoodQuantity(existing.food.quantity);
+    setFoodQuality(existing.food.quality);
+    setFoodTags(existing.food.tags);
+    setEditing(true);
+  }
+
+  function toggleFoodTag(tag: string) {
+    setFoodTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+    );
+  }
+
+  function togglePainLocation(location: string) {
+    setPainLocations((prev) =>
+      prev.includes(location)
+        ? prev.filter((l) => l !== location)
+        : [...prev, location],
+    );
+  }
+
+  if (existing && !editing) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+        <DateHeader date={date} />
+        <p className="text-4xl">🎉</p>
+        <p className="text-neutral-500">
+          {isToday ? "Ya registraste hoy." : "Este día ya está registrado."}
+        </p>
+        <button
+          type="button"
+          onClick={startEdit}
+          className="mt-2 rounded-lg border border-neutral-700 px-4 py-2 text-sm"
+        >
+          Editar
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 flex-col gap-6 p-6">
+      <DateHeader date={date} />
+
+      <div className="flex flex-col items-center gap-3">
+        <PainScale value={painLevel} onChange={setPainLevel} />
+        <button
+          type="button"
+          onClick={() => {
+            setPainLevel(0);
+            setPainLocations([]);
+          }}
+          className={`flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm transition-colors ${
+            painLevel === 0
+              ? `border-green-600 ${NO_PAIN.bgClass} ${NO_PAIN.textClass}`
+              : "border-neutral-700 text-neutral-500"
+          }`}
+        >
+          <NO_PAIN.Icon size={18} strokeWidth={1.75} />
+          {NO_PAIN.label}
+        </button>
+      </div>
+
+      {painLevel !== null && painLevel > 0 && (
+        <Field label="Ubicación del dolor">
+          <TagCloud
+            tags={PAIN_LOCATIONS}
+            selected={painLocations}
+            onToggle={togglePainLocation}
+          />
+        </Field>
+      )}
+
+      <hr className="my-4 border-neutral-800" />
+      <h2 className="text-lg font-medium">Actividad diaria</h2>
+
+      <Field label="Actividad (caminar, paseos, recados)">
+        <ScaleInput
+          value={activityLevel}
+          onChange={setActivityLevel}
+          ariaLabelPrefix="Actividad"
+        />
+      </Field>
+
+      <Field label="Necesidad de tumbarme">
+        <ScaleInput
+          value={lieDownNeed}
+          onChange={setLieDownNeed}
+          ariaLabelPrefix="Necesidad de tumbarme"
+        />
+      </Field>
+
+      <Field label="Deporte">
+        <SportPicker value={sports} onChange={setSports} />
+      </Field>
+
+      <Field label="Regla">
+        <ChoiceGroup options={[...YES_NO]} value={period} onChange={setPeriod} />
+      </Field>
+
+      <Field label="Relaciones sexuales">
+        <ChoiceGroup options={[...YES_NO]} value={sex} onChange={setSex} />
+      </Field>
+
+      <Field label="Comida — cantidad">
+        <ChoiceGroup<FoodQuantity>
+          options={[
+            { value: "poco", label: "Poco" },
+            { value: "normal", label: "Normal" },
+            { value: "mucho", label: "Mucho" },
+          ]}
+          value={foodQuantity}
+          onChange={setFoodQuantity}
+        />
+      </Field>
+
+      <Field label="Comida — calidad">
+        <ChoiceGroup<FoodQuality>
+          options={[
+            { value: "unhealthy", label: "Poco saludable" },
+            { value: "medium", label: "Normal" },
+            { value: "healthy", label: "Saludable" },
+          ]}
+          value={foodQuality}
+          onChange={setFoodQuality}
+        />
+      </Field>
+
+      <Field label="Comida — qué comiste">
+        <TagCloud tags={FOOD_TAGS} selected={foodTags} onToggle={toggleFoodTag} />
+      </Field>
+
+      <button
+        type="button"
+        onClick={handleSubmit}
+        disabled={painLevel === null}
+        className="rounded-lg bg-foreground py-3 text-center text-sm font-medium text-background disabled:opacity-40"
+      >
+        Guardar
+      </button>
+    </div>
+  );
+}

@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated at install time, see scripts/copy-sql-wasm.mjs
+/public/sql-wasm.wasm
+/public/sql-wasm-browser.wasm
