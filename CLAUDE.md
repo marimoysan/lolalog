@@ -26,26 +26,35 @@ llamadas a servicios de terceros que reciban estos datos en claro.
   eventos múltiples, así que ninguna de esas complejidades aplica.
   Las columnas reflejan el shape de [lib/types.ts](lib/types.ts) (`DailyEntry`);
   arrays/objetos (`painLocations`, `sports`, `food.tags`) se guardan como TEXT
-  con JSON. Incluye `updated_at` desde ya, aunque nada lo usa todavía, porque
-  el futuro sync (ver debajo) lo necesita para el upsert.
+  con JSON. Incluye `updated_at`, usado por el sync (ver debajo) para
+  arbitrar el upsert. También incluye `deleted` (soft-delete: "vaciar todo"
+  en el Log marca la fila en vez de hacer `DELETE`, para conservar
+  `updated_at` y poder seguir arbitrando el borrado por last-write-wins) —
+  dispositivos con datos ya guardados migran solos vía `ALTER TABLE` en
+  `initDailyLogSchema`.
 - **Sync (fase 2, implementado y en uso)**: relay cifrado end-to-end sobre
   Upstash Redis (Vercel Marketplace) — el servidor nunca descifra el
-  contenido del diario, solo `date`/`updated_at` en claro para arbitrar el
-  upsert last-write-wins. Automático (push en cada `saveEntry`, pull+merge al
-  abrir la app), sin botón manual ni polling. Configuración de passphrase +
-  token una vez por dispositivo en `/sync`. Detalle completo en
+  contenido del diario, solo `date`/`updated_at` (y, para un borrado,
+  `deleted: true`) en claro para arbitrar el upsert last-write-wins. Un
+  borrado se propaga como tombstone: mismo mecanismo de last-write-wins,
+  sin `iv`/`ciphertext` porque no hay contenido que cifrar — ver
+  `deleteEntry` en [lib/db/daily-log.ts](lib/db/daily-log.ts) y
+  `syncPushDelete`/`syncOnLoad` en [lib/sync/sync.ts](lib/sync/sync.ts).
+  Automático (push en cada `saveEntry`/`deleteEntry`, pull+merge al abrir la
+  app), sin botón manual ni polling. Configuración de passphrase + token una
+  vez por dispositivo en `/sync`. Detalle completo en
   [lib/sync/README.md](lib/sync/README.md), incluidos los nombres reales de
   las env vars de Redis (namespaced bajo `lolalog_` en este proyecto, no los
   genéricos `UPSTASH_REDIS_REST_*`). Confirmado funcionando entre dos
   dispositivos reales (móvil + desktop).
-- **Análisis y gráficas**: hoy fuera de la app (datos en bruto vía
-  `pandas.read_sql` en Python). En discusión para un Dashboard con gráficas
-  reales *dentro* de la app — si se construye, tiene que ser client-side
-  (consultando el sql.js ya cargado en cada dispositivo), nunca server-side:
-  el servidor de sync nunca ve datos en claro, así que cualquier cómputo de
-  stats en servidor rompería esa garantía. No añadir librerías de charting
-  sin que se pida explícitamente — sigue siendo la regla hasta que se decida
-  esto como plan aparte.
+- **Análisis y gráficas**: decidido — Dashboard con gráficas reales *dentro*
+  de la app, client-side (consultando el sql.js ya cargado en cada
+  dispositivo), nunca server-side: el servidor de sync nunca ve datos en
+  claro, así que cualquier cómputo de stats en servidor rompería esa
+  garantía. Primer MVP ya construido (solo dolor, ver "Pantallas
+  construidas" → Dashboard) como SVG propio, sin librería de charting — si
+  en el futuro se añade una librería, que sea porque se pide explícitamente,
+  no por defecto.
 
 ## Estado actual: SQLite + sync funcionando en producción
 
@@ -55,9 +64,10 @@ tabla `daily_log` vía sql.js, y persisten en IndexedDB (sobreviven a recargar
 y cerrar el navegador). No hay seed de datos de ejemplo — cada dispositivo
 empieza con la tabla vacía y se llena vía uso normal + sync. El sync entre
 dispositivos (ver "Sync" arriba) está desplegado y configurado — probado de
-verdad entre móvil y desktop. El siguiente paso grande, todavía sin decidir,
-es si el Dashboard pasa a tener gráficas reales dentro de la app (ver
-"Análisis y gráficas").
+verdad entre móvil y desktop. El Dashboard tiene ya un primer MVP de
+gráficas reales (solo dolor por ahora, ver "Análisis y gráficas" y
+"Pantallas construidas" → Dashboard); el siguiente paso es sumar más
+métricas al mismo Dashboard (actividad, deporte, ciclo, comida...).
 
 ### Pantallas construidas
 
@@ -72,14 +82,32 @@ es si el Dashboard pasa a tener gráficas reales dentro de la app (ver
   Dashboard / Log (default, `/`) / Historial, con iconos de `lucide-react`.
 - **Log** ([components/LogForm.tsx](components/LogForm.tsx)): una sola
   pantalla reutilizada tanto para hoy (`/`) como para cualquier día pasado
-  (`/history/[date]`) — solo cambia qué `date` recibe. Dos estados: si el día
-  ya tiene entrada guardada muestra una celebración + botón "Editar"; si no,
-  el formulario completo. El estado logged/not-logged se deriva de si existe
-  fila para esa fecha, no de un flag aparte.
+  (`/history/[date]`) — solo cambia qué `date` recibe, vía la prop
+  `isToday`. El estado logged/not-logged se deriva de si existe fila
+  (no borrada) para esa fecha, no de un flag aparte. Comportamiento distinto
+  por `isToday`:
+  - **Hoy**: si ya hay entrada, muestra una celebración + botón "Editar"
+    antes de abrir el form; al guardar, se queda en esa misma pantalla
+    (vuelve a mostrar la celebración).
+  - **Día pasado**: se salta la celebración y abre directo en modo edición
+    (precargado si ya había datos); tiene una barra superior con enlace
+    "← Historial" y, si el día ya tenía entrada, un botón "Vaciar todo" que
+    resetea el form a blanco. Guardar con `painLevel` en blanco sobre un día
+    que ya existía borra la entrada (vuelve a "Sin registrar") en vez de
+    guardar; guardar (con o sin borrar) siempre navega de vuelta a `/`.
 - **Historial** ([components/HistoryList.tsx](components/HistoryList.tsx)):
-  últimos 30 días, incluyendo huecos "Sin registrar". Tap en cualquier día
-  abre el Log con esa fecha fija (edición o entrada retroactiva).
-- **Dashboard**: placeholder "Próximamente".
+  últimos 30 días, incluyendo huecos "Sin registrar". Tap en el día de hoy
+  enlaza directo a `/` (no a `/history/[date]`); tap en cualquier otro día
+  abre el Log en esa fecha, directo en modo edición (ver arriba).
+- **Dashboard** ([app/dashboard/page.tsx](app/dashboard/page.tsx)): primer
+  MVP — gráfica de dolor por día ([components/PainChart.tsx](components/PainChart.tsx),
+  SVG propio sin librería), tabs Última semana / Último mes / Custom
+  (`ChoiceGroup` reutilizado; Custom revela un mini-form con dos
+  `<input type="date">` + "Aplicar"). Eje Y fijo 0–5 sin números; los puntos
+  usan los mismos colores/labels de `lib/pain-scale.ts` que el resto de la
+  app; días sin registrar quedan como hueco en la línea, no como 0. Arrastrar
+  sobre la gráfica (mouse o touch, vía Pointer Events) muestra un crosshair +
+  tooltip con la fecha y el nivel (o "Sin registrar").
 
 ### Esquema actual de `DailyEntry` ([lib/types.ts](lib/types.ts))
 
@@ -160,3 +188,12 @@ marca, salvo "Sin dolor" que sí usa `brand-green`.
   captura: Chrome Headless Shell renderiza algunos colores con artefactos
   (texto negro sale anaranjado, blends se ven lavados) que no existen en el
   navegador real.
+- Nunca formatear una fecha local con `Date.toISOString().slice(0, 10)`:
+  `toISOString()` convierte a UTC primero, así que en cualquier huso horario
+  por delante de UTC (España en verano, por ejemplo) desplaza la fecha un
+  día hacia atrás en ciertas horas. `datesInRange` en [lib/date.ts](lib/date.ts)
+  construye el string desde los campos locales del `Date`
+  (`getFullYear`/`getMonth`/`getDate`) en vez de pasar por UTC — seguir ese
+  patrón en cualquier función de fechas nueva. `todayISO()` y `lastNDays()`
+  en el mismo archivo todavía usan el patrón viejo (bug latente, no
+  corregido aún — solo se manifiesta de madrugada según el huso horario).
