@@ -2,6 +2,12 @@ export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+export function yesterdayISO(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export function formatDisplayDate(iso: string): string {
   const date = new Date(`${iso}T00:00:00`);
   return date.toLocaleDateString("es-ES", {
@@ -9,6 +15,12 @@ export function formatDisplayDate(iso: string): string {
     day: "numeric",
     month: "long",
   });
+}
+
+// Day + month, no weekday — used when the weekday is replaced by "Hoy"/"Ayer".
+export function formatDayMonth(iso: string): string {
+  const date = new Date(`${iso}T00:00:00`);
+  return date.toLocaleDateString("es-ES", { day: "numeric", month: "long" });
 }
 
 export function formatDateParts(iso: string): {
