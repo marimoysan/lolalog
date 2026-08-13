@@ -1,10 +1,11 @@
 import { formatDateParts } from "@/lib/date";
 
 export function DateHeader({ date, isToday = true }: { date: string; isToday?: boolean }) {
-  const { day, month, year } = formatDateParts(date);
+  const { weekday, day, month, year } = formatDateParts(date);
 
   return (
     <div className="flex flex-col items-center py-4">
+      <span className="text-sm text-neutral-500">{weekday}</span>
       <span
         className={`text-7xl font-bold leading-none ${
           isToday ? "text-brand-green" : "text-foreground"

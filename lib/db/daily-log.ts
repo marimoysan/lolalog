@@ -11,7 +11,7 @@ export function initDailyLogSchema(db: Database): void {
   db.exec(`
     CREATE TABLE IF NOT EXISTS daily_log (
       date TEXT PRIMARY KEY,
-      pain_level INTEGER NOT NULL,
+      pain_level INTEGER,
       pain_locations TEXT NOT NULL DEFAULT '[]',
       activity_level INTEGER,
       lie_down_need INTEGER,
@@ -29,16 +29,55 @@ export function initDailyLogSchema(db: Database): void {
   // Devices with a DB created before "deleted" existed: CREATE TABLE IF NOT
   // EXISTS above is a no-op for them, so add the column here.
   const tableInfo = db.exec("PRAGMA table_info(daily_log)");
-  const hasDeletedColumn = tableInfo[0]?.values.some((row) => row[1] === "deleted");
+  const columns = tableInfo[0]?.values ?? [];
+  const hasDeletedColumn = columns.some((row) => row[1] === "deleted");
   if (!hasDeletedColumn) {
     db.exec("ALTER TABLE daily_log ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0");
+  }
+
+  // Devices with a DB created before pain_level was made optional (retro
+  // logs without a remembered pain level): SQLite can't relax a NOT NULL
+  // constraint with ALTER TABLE, so rebuild the table when it's still set.
+  const painLevelCol = columns.find((row) => row[1] === "pain_level");
+  const painLevelIsNotNull = painLevelCol ? painLevelCol[3] === 1 : false;
+  if (painLevelIsNotNull) {
+    db.exec(`
+      CREATE TABLE daily_log_new (
+        date TEXT PRIMARY KEY,
+        pain_level INTEGER,
+        pain_locations TEXT NOT NULL DEFAULT '[]',
+        activity_level INTEGER,
+        lie_down_need INTEGER,
+        sports TEXT NOT NULL DEFAULT '[]',
+        period INTEGER NOT NULL DEFAULT 0,
+        sex INTEGER NOT NULL DEFAULT 0,
+        food_quantity TEXT,
+        food_quality TEXT,
+        food_tags TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT NOT NULL,
+        deleted INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+    db.exec(`
+      INSERT INTO daily_log_new
+        (date, pain_level, pain_locations, activity_level, lie_down_need,
+         sports, period, sex, food_quantity, food_quality, food_tags,
+         updated_at, deleted)
+      SELECT
+        date, pain_level, pain_locations, activity_level, lie_down_need,
+        sports, period, sex, food_quantity, food_quality, food_tags,
+        updated_at, deleted
+      FROM daily_log
+    `);
+    db.exec("DROP TABLE daily_log");
+    db.exec("ALTER TABLE daily_log_new RENAME TO daily_log");
   }
 }
 
 function rowToEntry(row: Record<string, unknown>): DailyEntry {
   return {
     date: row.date as string,
-    painLevel: row.pain_level as PainLevel,
+    painLevel: row.pain_level as PainLevel | null,
     painLocations: JSON.parse(row.pain_locations as string),
     activityLevel: row.activity_level as ScaleLevel | null,
     lieDownNeed: row.lie_down_need as ScaleLevel | null,
@@ -125,7 +164,7 @@ export function deleteEntry(
 ): string {
   db.run(
     `INSERT INTO daily_log (date, pain_level, updated_at, deleted)
-     VALUES (?, 0, ?, 1)
+     VALUES (?, NULL, ?, 1)
      ON CONFLICT(date) DO UPDATE SET updated_at = excluded.updated_at, deleted = 1`,
     [date, updatedAt],
   );

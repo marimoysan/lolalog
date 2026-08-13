@@ -56,7 +56,9 @@ export type FoodLog = {
 
 export type DailyEntry = {
   date: string; // "YYYY-MM-DD"
-  painLevel: PainLevel;
+  // null = not answered (e.g. a retrospective log for activity/sport where
+  // pain wasn't recalled), distinct from 0 = explicitly "no pain".
+  painLevel: PainLevel | null;
   painLocations: string[];
   activityLevel: ScaleLevel | null;
   lieDownNeed: ScaleLevel | null;
@@ -73,7 +75,7 @@ export function emptyFoodLog(): FoodLog {
 export function emptyEntry(date: string): DailyEntry {
   return {
     date,
-    painLevel: 0,
+    painLevel: null,
     painLocations: [],
     activityLevel: null,
     lieDownNeed: null,

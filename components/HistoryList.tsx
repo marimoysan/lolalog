@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { CircleDashed } from "lucide-react";
 import { useEntries } from "@/lib/db/entries-store";
 import { formatDisplayDate, todayISO } from "@/lib/date";
 import { painLevelInfo } from "@/lib/pain-scale";
@@ -23,6 +24,15 @@ function DayBadges({ entry }: { entry: DailyEntry | undefined }) {
 function PainStatus({ entry }: { entry: DailyEntry | undefined }) {
   if (!entry) {
     return <span className="text-sm text-neutral-500">Sin registrar</span>;
+  }
+
+  if (entry.painLevel === null) {
+    return (
+      <span className="flex items-center gap-1.5 text-sm text-neutral-500">
+        <CircleDashed size={18} strokeWidth={1.75} />
+        Sin dato
+      </span>
+    );
   }
 
   const { Icon, label, textClass } = painLevelInfo(entry.painLevel);

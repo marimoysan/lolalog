@@ -92,9 +92,11 @@ métricas al mismo Dashboard (actividad, deporte, ciclo, comida...).
   - **Día pasado**: se salta la celebración y abre directo en modo edición
     (precargado si ya había datos); tiene una barra superior con enlace
     "← Historial" y, si el día ya tenía entrada, un botón "Vaciar todo" que
-    resetea el form a blanco. Guardar con `painLevel` en blanco sobre un día
-    que ya existía borra la entrada (vuelve a "Sin registrar") en vez de
-    guardar; guardar (con o sin borrar) siempre navega de vuelta a `/`.
+    resetea el form a blanco. Guardar con *todos* los campos en blanco sobre
+    un día que ya existía borra la entrada (vuelve a "Sin registrar") en vez
+    de guardar — `painLevel` solo, por sí solo, ya no dispara esto (ver
+    esquema de `DailyEntry` debajo); guardar (con o sin borrar) siempre
+    navega de vuelta a `/history`, no a `/`.
 - **Historial** ([components/HistoryList.tsx](components/HistoryList.tsx)):
   últimos 30 días, incluyendo huecos "Sin registrar". Tap en el día de hoy
   enlaza directo a `/` (no a `/history/[date]`); tap en cualquier otro día
@@ -111,9 +113,13 @@ métricas al mismo Dashboard (actividad, deporte, ciclo, comida...).
 
 ### Esquema actual de `DailyEntry` ([lib/types.ts](lib/types.ts))
 
-Todo opcional salvo `painLevel` (único campo requerido para poder guardar):
+Todo opcional, incluido `painLevel` — un día se guarda si tiene *algún* campo
+relleno (no hace falta que sea el dolor: p. ej. registrar deporte en
+retrospectiva sin acordarte del dolor de ese día es válido):
 
-- `painLevel: 0-5` (0 = sin dolor, vía botón aparte)
+- `painLevel: 0-5 | null` (0 = sin dolor vía botón aparte; `null` = no
+  respondido, distinto de 0 — en Historial se muestra como "Sin dato" en vez
+  del icono de dolor)
 - `painLocations: string[]` — multiselect entre 4 zonas (`PAIN_LOCATIONS`),
   solo visible en el form si `painLevel > 0`
 - `activityLevel`, `lieDownNeed`: escalas genéricas 1-5
@@ -142,8 +148,8 @@ Todo opcional salvo `painLevel` (único campo requerido para poder guardar):
   (tags de comida, ubicación del dolor).
 - [SportPicker.tsx](components/SportPicker.tsx): lista de deportes
   añadir/quitar, cada fila con dropdown + `ScaleInput`.
-- [DateHeader.tsx](components/DateHeader.tsx): fecha apilada (día grande /
-  mes / año pequeños), usada arriba del Log.
+- [DateHeader.tsx](components/DateHeader.tsx): fecha apilada (día de la
+  semana / día grande / mes / año pequeños), usada arriba del Log.
 
 ### Identidad visual
 

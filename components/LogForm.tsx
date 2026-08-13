@@ -71,19 +71,35 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
   const [foodTags, setFoodTags] = useState<string[]>(existing?.food.tags ?? []);
 
   // Today stays on the page and flips to the celebration screen; any other
-  // day (opened from Historial) always returns to the home/today screen.
+  // day (opened from Historial) always returns there instead.
   function finishEditing() {
     if (isToday) {
       setEditing(false);
     } else {
-      router.push("/");
+      router.push("/history");
     }
   }
 
+  // painLevel is no longer the sole required field — a retrospective log
+  // (e.g. remembering activity/sport but not the pain that day) is valid
+  // with painLevel left blank, as long as something else was filled in.
+  const hasAnyData =
+    painLevel !== null ||
+    painLocations.length > 0 ||
+    activityLevel !== null ||
+    lieDownNeed !== null ||
+    sports.length > 0 ||
+    period !== null ||
+    sex !== null ||
+    foodQuantity !== null ||
+    foodQuality !== null ||
+    foodTags.length > 0;
+
   function handleSubmit() {
-    if (painLevel === null) {
-      // Blank pain level on a day that already had an entry means "Vaciar
+    if (!hasAnyData) {
+      // Everything blank on a day that already had an entry means "Vaciar
       // todo" was used: save-as-blank is how you return a day to unlogged.
+      // On a brand-new day there's nothing to save (button is disabled).
       if (existing) {
         deleteEntry(date);
         finishEditing();
@@ -281,7 +297,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
       <button
         type="button"
         onClick={handleSubmit}
-        disabled={painLevel === null && !existing}
+        disabled={!hasAnyData && !existing}
         className="rounded-xl bg-brand-green py-3 text-center text-sm font-medium text-white disabled:opacity-40"
       >
         Guardar

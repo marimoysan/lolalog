@@ -12,15 +12,22 @@ export function formatDisplayDate(iso: string): string {
 }
 
 export function formatDateParts(iso: string): {
+  weekday: string;
   day: string;
   month: string;
   year: string;
 } {
   const date = new Date(`${iso}T00:00:00`);
+  const weekday = date.toLocaleDateString("es-ES", { weekday: "long" });
   const day = date.toLocaleDateString("es-ES", { day: "numeric" });
   const month = date.toLocaleDateString("es-ES", { month: "long" });
   const year = date.toLocaleDateString("es-ES", { year: "numeric" });
-  return { day, month: month.charAt(0).toUpperCase() + month.slice(1), year };
+  return {
+    weekday: weekday.charAt(0).toUpperCase() + weekday.slice(1),
+    day,
+    month: month.charAt(0).toUpperCase() + month.slice(1),
+    year,
+  };
 }
 
 // Most recent day first.
