@@ -7,6 +7,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Delete } from "lucide-react";
 import { BottomNav } from "@/components/BottomNav";
+import { SwipeNav } from "@/components/SwipeNav";
 import { TopBar } from "@/components/TopBar";
 
 const PIN = process.env.NEXT_PUBLIC_LOLALOG_PIN ?? "1234";
@@ -137,8 +138,8 @@ export function PinGate({ children }: { children: ReactNode }) {
   return (
     <>
       <TopBar />
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col pt-[calc(3rem+env(safe-area-inset-top))] pb-[calc(4rem+env(safe-area-inset-bottom))]">
-        {children}
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col overflow-x-hidden pt-[calc(3rem+env(safe-area-inset-top))] pb-[calc(4rem+env(safe-area-inset-bottom))]">
+        <SwipeNav>{children}</SwipeNav>
       </div>
       <BottomNav />
     </>
