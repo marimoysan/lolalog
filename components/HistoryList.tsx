@@ -4,9 +4,23 @@ import Link from "next/link";
 import { useEntries } from "@/lib/db/entries-store";
 import { formatDisplayDate, todayISO } from "@/lib/date";
 import { painLevelInfo } from "@/lib/pain-scale";
+import { dayBadges, BADGE_CLASS } from "@/lib/day-badges";
 import type { DailyEntry } from "@/lib/types";
 
-function EntryStatus({ entry }: { entry: DailyEntry | undefined }) {
+function DayBadges({ entry }: { entry: DailyEntry | undefined }) {
+  if (!entry) return null;
+  return (
+    <>
+      {dayBadges(entry).map((badge) => (
+        <span key={badge.key} title={badge.label} className={BADGE_CLASS}>
+          <badge.Icon size={14} strokeWidth={1.75} />
+        </span>
+      ))}
+    </>
+  );
+}
+
+function PainStatus({ entry }: { entry: DailyEntry | undefined }) {
   if (!entry) {
     return <span className="text-sm text-neutral-500">Sin registrar</span>;
   }
@@ -35,8 +49,11 @@ export function HistoryList({ days }: { days: string[] }) {
             href={date === today ? "/" : `/history/${date}`}
             className="flex items-center justify-between rounded-xl border border-neutral-800 px-4 py-3 text-sm text-foreground no-underline transition-colors hover:border-brand-green/40"
           >
-            <span className="capitalize">{formatDisplayDate(date)}</span>
-            <EntryStatus entry={entry} />
+            <span className="flex items-center gap-2">
+              <span className="capitalize">{formatDisplayDate(date)}</span>
+              <DayBadges entry={entry} />
+            </span>
+            <PainStatus entry={entry} />
           </Link>
         );
       })}
