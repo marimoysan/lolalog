@@ -40,7 +40,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="flex min-h-dvh flex-col" suppressHydrationWarning>
+      <body className="flex h-dvh flex-col overflow-hidden" suppressHydrationWarning>
         <EntriesProvider>
           <PinGate>{children}</PinGate>
         </EntriesProvider>

@@ -70,7 +70,7 @@ export function PinGate({ children }: { children: ReactNode }) {
 
   if (!unlocked) {
     return (
-      <main className="flex flex-1 flex-col items-center justify-between overflow-y-auto p-8 pt-12 pb-[max(3rem,env(safe-area-inset-bottom))]">
+      <main className="flex min-h-0 flex-1 flex-col items-center justify-between overflow-y-auto p-8 pt-12 pb-[max(3rem,env(safe-area-inset-bottom))]">
         <div className="flex flex-col items-center gap-4 pt-6">
           <img
             src="/lolalog-icono-1024.svg"
@@ -138,7 +138,7 @@ export function PinGate({ children }: { children: ReactNode }) {
   return (
     <>
       <TopBar />
-      <div className="mx-auto flex w-full max-w-md flex-1 flex-col overflow-x-hidden pt-[calc(3rem+env(safe-area-inset-top))] pb-[calc(4rem+env(safe-area-inset-bottom))]">
+      <div className="mx-auto flex w-full max-w-md min-h-0 flex-1 flex-col">
         <SwipeNav>{children}</SwipeNav>
       </div>
       <BottomNav />
