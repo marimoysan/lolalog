@@ -13,7 +13,7 @@ import { TagCloud } from "@/components/TagCloud";
 import { SportPicker } from "@/components/SportPicker";
 import { PainEpisodePicker } from "@/components/PainEpisodePicker";
 import { NO_PAIN } from "@/lib/pain-scale";
-import { FOOD_TAGS, PAIN_LOCATIONS } from "@/lib/types";
+import { FOOD_TAGS } from "@/lib/types";
 import type {
   PainLevel,
   ScaleLevel,
@@ -44,9 +44,6 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
 
   const [painLevel, setPainLevel] = useState<PainLevel | null>(
     existing?.painLevel ?? null,
-  );
-  const [painLocations, setPainLocations] = useState<string[]>(
-    existing?.painLocations ?? [],
   );
   const [painEpisodes, setPainEpisodes] = useState<PainEpisode[]>(
     existing?.painEpisodes ?? [],
@@ -85,7 +82,6 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
   // with painLevel left blank, as long as something else was filled in.
   const hasAnyData =
     painLevel !== null ||
-    painLocations.length > 0 ||
     painEpisodes.length > 0 ||
     activityLevel !== null ||
     lieDownNeed !== null ||
@@ -101,7 +97,6 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
     return {
       date,
       painLevel,
-      painLocations,
       painEpisodes,
       activityLevel,
       lieDownNeed,
@@ -164,7 +159,6 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
   }, [
     isToday,
     painLevel,
-    painLocations,
     painEpisodes,
     activityLevel,
     lieDownNeed,
@@ -179,7 +173,6 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
 
   function clearAll() {
     setPainLevel(null);
-    setPainLocations([]);
     setPainEpisodes([]);
     setActivityLevel(null);
     setLieDownNeed(null);
@@ -195,14 +188,6 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
   function toggleFoodTag(tag: string) {
     setFoodTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
-    );
-  }
-
-  function togglePainLocation(location: string) {
-    setPainLocations((prev) =>
-      prev.includes(location)
-        ? prev.filter((l) => l !== location)
-        : [...prev, location],
     );
   }
 
@@ -235,10 +220,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
         <PainScale value={painLevel} onChange={setPainLevel} />
         <button
           type="button"
-          onClick={() => {
-            setPainLevel(0);
-            setPainLocations([]);
-          }}
+          onClick={() => setPainLevel(0)}
           className={`flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm transition-colors ${
             painLevel === 0
               ? `border-brand-green ${NO_PAIN.bgClass} ${NO_PAIN.textClass}`
@@ -249,16 +231,6 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
           {NO_PAIN.label}
         </button>
       </div>
-
-      {painLevel !== null && painLevel > 0 && (
-        <Field label="Ubicación del dolor">
-          <TagCloud
-            tags={PAIN_LOCATIONS}
-            selected={painLocations}
-            onToggle={togglePainLocation}
-          />
-        </Field>
-      )}
 
       <Field label="Episodios de dolor">
         <PainEpisodePicker value={painEpisodes} onChange={setPainEpisodes} />

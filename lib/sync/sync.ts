@@ -6,7 +6,7 @@ import { persist } from "@/lib/db/client";
 import { decryptCanaryOk, decryptEntry, encryptCanary, encryptEntry } from "@/lib/sync/crypto";
 import { isSyncConfigured, loadKey } from "@/lib/sync/key-store";
 import { pullRemote, pushCanary, pushRemote, SyncAuthError } from "@/lib/sync/api-client";
-import type { DailyEntry } from "@/lib/types";
+import { normalizeEntry, type DailyEntry } from "@/lib/types";
 import type { SyncResult } from "@/lib/sync/types";
 
 export async function syncPush(entry: DailyEntry, updatedAt: string): Promise<void> {
@@ -59,7 +59,11 @@ export async function syncOnLoad(db: Database): Promise<SyncResult> {
       continue;
     }
     try {
-      const entry = await decryptEntry(key, row.date, { iv: row.iv!, ciphertext: row.ciphertext! });
+      const decrypted = await decryptEntry(key, row.date, { iv: row.iv!, ciphertext: row.ciphertext! });
+      // A row pushed by a device running an older version of the app can be
+      // missing fields added since — normalize before this ever reaches
+      // React state, the same way a local SQLite read does.
+      const entry = normalizeEntry(decrypted);
       upsertEntry(db, entry, row.updatedAt);
       applied[row.date] = entry;
     } catch {

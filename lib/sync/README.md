@@ -9,9 +9,9 @@ contenido del diario en claro.
 
 - Clave AES-GCM-256 derivada de una passphrase con PBKDF2 (250.000
   iteraciones, salt fijo de la app — ver [crypto.ts](crypto.ts)).
-- Se cifra todo el contenido del día (`painLevel`, `painLocations`,
-  `activityLevel`, `lieDownNeed`, `sports`, `period`, `sex`, `food`) como un
-  blob JSON con IV aleatorio por operación.
+- Se cifra todo el contenido del día (`painLevel`, `painEpisodes`,
+  `activityLevel`, `lieDownNeed`, `sports`, `period`, `sex`, `food`, `notes`)
+  como un blob JSON con IV aleatorio por operación.
 - `date` y `updated_at` van **en claro** — el servidor los necesita para
   indexar por fecha y arbitrar last-write-wins sin descifrar nada. Trade-off
   consciente: el servidor aprende qué días tienes registrados, nunca qué

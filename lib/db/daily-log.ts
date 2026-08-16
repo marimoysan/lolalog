@@ -1,11 +1,12 @@
 import type { Database } from "sql.js";
-import type {
-  DailyEntry,
-  FoodQuality,
-  FoodQuantity,
-  PainEpisode,
-  PainLevel,
-  ScaleLevel,
+import {
+  normalizeEntry,
+  type DailyEntry,
+  type FoodQuality,
+  type FoodQuantity,
+  type PainEpisode,
+  type PainLevel,
+  type ScaleLevel,
 } from "@/lib/types";
 
 export function initDailyLogSchema(db: Database): void {
@@ -13,6 +14,10 @@ export function initDailyLogSchema(db: Database): void {
     CREATE TABLE IF NOT EXISTS daily_log (
       date TEXT PRIMARY KEY,
       pain_level INTEGER,
+      -- Legacy, unread/unwritten by the app since location moved to being
+      -- per-episode (inside pain_episodes) instead of one tag per day. Kept
+      -- (not dropped) so any already-stored values aren't destroyed; new
+      -- rows just get the default.
       pain_locations TEXT NOT NULL DEFAULT '[]',
       pain_episodes TEXT NOT NULL DEFAULT '[]',
       activity_level INTEGER,
@@ -90,10 +95,9 @@ export function initDailyLogSchema(db: Database): void {
 }
 
 function rowToEntry(row: Record<string, unknown>): DailyEntry {
-  return {
+  return normalizeEntry({
     date: row.date as string,
     painLevel: row.pain_level as PainLevel | null,
-    painLocations: JSON.parse(row.pain_locations as string),
     painEpisodes: JSON.parse(row.pain_episodes as string) as PainEpisode[],
     activityLevel: row.activity_level as ScaleLevel | null,
     lieDownNeed: row.lie_down_need as ScaleLevel | null,
@@ -106,7 +110,7 @@ function rowToEntry(row: Record<string, unknown>): DailyEntry {
       tags: JSON.parse(row.food_tags as string),
     },
     notes: row.notes as string,
-  };
+  });
 }
 
 export function getAllEntries(db: Database): Record<string, DailyEntry> {
@@ -134,13 +138,12 @@ export function upsertEntry(
 ): string {
   db.run(
     `INSERT OR REPLACE INTO daily_log
-      (date, pain_level, pain_locations, pain_episodes, activity_level, lie_down_need,
+      (date, pain_level, pain_episodes, activity_level, lie_down_need,
        sports, period, sex, food_quantity, food_quality, food_tags, notes, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       entry.date,
       entry.painLevel,
-      JSON.stringify(entry.painLocations),
       JSON.stringify(entry.painEpisodes),
       entry.activityLevel,
       entry.lieDownNeed,

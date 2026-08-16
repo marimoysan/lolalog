@@ -25,7 +25,7 @@ llamadas a servicios de terceros que reciban estos datos en claro.
   (dolor, comida, deporte...): el diario es de una entrada al día, no de
   eventos múltiples, así que ninguna de esas complejidades aplica.
   Las columnas reflejan el shape de [lib/types.ts](lib/types.ts) (`DailyEntry`);
-  arrays/objetos (`painLocations`, `sports`, `food.tags`) se guardan como TEXT
+  arrays/objetos (`painEpisodes`, `sports`, `food.tags`) se guardan como TEXT
   con JSON. Incluye `updated_at`, usado por el sync (ver debajo) para
   arbitrar el upsert. También incluye `deleted` (soft-delete: "vaciar todo"
   en el Log marca la fila en vez de hacer `DELETE`, para conservar
@@ -120,14 +120,27 @@ retrospectiva sin acordarte del dolor de ese día es válido):
 - `painLevel: 0-5 | null` (0 = sin dolor vía botón aparte; `null` = no
   respondido, distinto de 0 — en Historial se muestra como "Sin dato" en vez
   del icono de dolor)
-- `painLocations: string[]` — multiselect entre 4 zonas (`PAIN_LOCATIONS`),
-  solo visible en el form si `painLevel > 0`
+- `painEpisodes: PainEpisode[]` — episodios puntuales de dolor durante el
+  día (lista libre, añadir/quitar, timestamp automático al crear), cada uno
+  con trigger (`PAIN_EPISODE_TRIGGERS`, single-select), síntomas
+  (`PAIN_EPISODE_SYMPTOMS`, multiselect), ubicación (`PAIN_LOCATIONS`,
+  multiselect — vive aquí, por episodio, no a nivel de día) y nota libre.
+  En [PainEpisodePicker.tsx](components/PainEpisodePicker.tsx) cada episodio
+  se puede colapsar a una fila-resumen (trigger · ubicación · síntomas, +
+  icono si tiene nota) para que un día con varios no sea una pared de forms
+  abiertos.
 - `activityLevel`, `lieDownNeed`: escalas genéricas 1-5
 - `sports: SportEntry[]` — lista libre (añadir/quitar), cada uno con tipo
   (`SPORT_TYPES`) + intensidad 1-5
 - `period`, `sex`: booleanos (Sí/No)
 - `food: { quantity, quality, tags[] }` — cantidad y calidad de 3 opciones,
   tags multiselect (`FOOD_TAGS`)
+- `notes: string` — notas libres al final del registro, para lo que no
+  encaje en ningún otro campo
+
+La columna SQLite `pain_locations` (ubicación a nivel de día, versión previa
+a moverla dentro de `painEpisodes`) sigue en el schema pero ya no se lee ni
+se escribe — ver comentario en `initDailyLogSchema`.
 
 ### Sistema de inputs (reutilizar, no crear inputs ad-hoc nuevos)
 

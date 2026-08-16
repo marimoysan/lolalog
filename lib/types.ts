@@ -47,6 +47,7 @@ export type PainEpisode = {
   timestamp: string; // ISO 8601, set when the episode is added
   trigger: PainEpisodeTrigger | null;
   symptoms: string[];
+  locations: string[]; // multiselect among PAIN_LOCATIONS
   note: string;
 };
 
@@ -83,7 +84,6 @@ export type DailyEntry = {
   // null = not answered (e.g. a retrospective log for activity/sport where
   // pain wasn't recalled), distinct from 0 = explicitly "no pain".
   painLevel: PainLevel | null;
-  painLocations: string[];
   painEpisodes: PainEpisode[];
   activityLevel: ScaleLevel | null;
   lieDownNeed: ScaleLevel | null;
@@ -94,6 +94,25 @@ export type DailyEntry = {
   notes: string;
 };
 
+// Fills in fields added to PainEpisode after some entries were already
+// saved (locally or pushed to another device via sync) — without this,
+// episodes created before a given field existed come back from storage
+// missing it (undefined, not just empty), and spreading/iterating that
+// throws instead of just being empty. Run on every DailyEntry as it enters
+// the app (SQLite read, sync pull) so the rest of the app can trust the
+// shape unconditionally.
+export function normalizeEntry(entry: DailyEntry): DailyEntry {
+  return {
+    ...entry,
+    painEpisodes: entry.painEpisodes.map((ep) => ({
+      ...ep,
+      symptoms: ep.symptoms ?? [],
+      locations: ep.locations ?? [],
+      note: ep.note ?? "",
+    })),
+  };
+}
+
 export function emptyFoodLog(): FoodLog {
   return { quantity: null, quality: null, tags: [] };
 }
@@ -102,7 +121,6 @@ export function emptyEntry(date: string): DailyEntry {
   return {
     date,
     painLevel: null,
-    painLocations: [],
     painEpisodes: [],
     activityLevel: null,
     lieDownNeed: null,
