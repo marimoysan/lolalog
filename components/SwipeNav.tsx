@@ -1,7 +1,15 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react";
 
 // Order matches BottomNav — swiping right goes to the previous tab, left to
 // the next one. Only these three top-level routes are swipeable; subpages
@@ -29,9 +37,37 @@ export function SwipeNav({ children }: { children: ReactNode }) {
   // row) still fires a click on release — swallow exactly that one click
   // so a swipe never also triggers the thing being swiped over.
   const suppressClick = useRef(false);
+  // Set to the exit direction the moment a swipe commits to a route change,
+  // so the pathname-change effect below knows to snap the (now-new) page
+  // back into view instead of leaving it slid off-screen.
+  const committedExit = useRef<1 | -1 | null>(null);
 
   const index = ROUTES.indexOf(pathname);
   const swipeable = index !== -1;
+
+  // Client-side navigation without a prefetched route has to fetch/compile
+  // the target before it can render, which is what made the swipe feel
+  // like it "did nothing" for a beat before jumping — warm the other tabs
+  // so router.push below can complete near-instantly.
+  useEffect(() => {
+    for (const route of ROUTES) {
+      if (route !== pathname) router.prefetch(route);
+    }
+  }, [pathname, router]);
+
+  // Once the route has actually changed (new page mounted under us), snap
+  // the still-off-screen transform back to 0 without animating — the slide
+  // "out" already played on release, so this just reveals the new page in
+  // place instead of sliding it in from off-screen too.
+  useEffect(() => {
+    if (committedExit.current === null) return;
+    committedExit.current = null;
+    dragXRef.current = 0;
+    setDragging(true);
+    setDragX(0);
+    const frame = requestAnimationFrame(() => setDragging(false));
+    return () => cancelAnimationFrame(frame);
+  }, [pathname]);
 
   function handlePointerDown(e: PointerEvent<HTMLDivElement>) {
     if (!swipeable) return;
@@ -63,10 +99,22 @@ export function SwipeNav({ children }: { children: ReactNode }) {
     if (decided.current === "horizontal") {
       suppressClick.current = true;
       const finalDragX = dragXRef.current;
-      if (finalDragX <= -SWIPE_THRESHOLD && index < ROUTES.length - 1) {
-        router.push(ROUTES[index + 1]);
-      } else if (finalDragX >= SWIPE_THRESHOLD && index > 0) {
-        router.push(ROUTES[index - 1]);
+      const goNext = finalDragX <= -SWIPE_THRESHOLD && index < ROUTES.length - 1;
+      const goPrev = finalDragX >= SWIPE_THRESHOLD && index > 0;
+
+      if (goNext || goPrev) {
+        // Keep carrying the current screen off in the same direction (a
+        // "fling" continuation) instead of snapping back to center first —
+        // that snap-back was the visual cue that made the eventual route
+        // change look like a delayed, unrelated jump.
+        committedExit.current = goNext ? -1 : 1;
+        dragXRef.current = 0;
+        setDragging(false);
+        setDragX((goNext ? -1 : 1) * window.innerWidth);
+        router.push(ROUTES[index + (goNext ? 1 : -1)]);
+        start.current = null;
+        decided.current = null;
+        return;
       }
     }
     start.current = null;
