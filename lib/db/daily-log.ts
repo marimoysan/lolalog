@@ -3,6 +3,7 @@ import type {
   DailyEntry,
   FoodQuality,
   FoodQuantity,
+  PainEpisode,
   PainLevel,
   ScaleLevel,
 } from "@/lib/types";
@@ -13,6 +14,7 @@ export function initDailyLogSchema(db: Database): void {
       date TEXT PRIMARY KEY,
       pain_level INTEGER,
       pain_locations TEXT NOT NULL DEFAULT '[]',
+      pain_episodes TEXT NOT NULL DEFAULT '[]',
       activity_level INTEGER,
       lie_down_need INTEGER,
       sports TEXT NOT NULL DEFAULT '[]',
@@ -21,6 +23,7 @@ export function initDailyLogSchema(db: Database): void {
       food_quantity TEXT,
       food_quality TEXT,
       food_tags TEXT NOT NULL DEFAULT '[]',
+      notes TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL,
       deleted INTEGER NOT NULL DEFAULT 0
     )
@@ -34,10 +37,20 @@ export function initDailyLogSchema(db: Database): void {
   if (!hasDeletedColumn) {
     db.exec("ALTER TABLE daily_log ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0");
   }
+  const hasPainEpisodesColumn = columns.some((row) => row[1] === "pain_episodes");
+  if (!hasPainEpisodesColumn) {
+    db.exec("ALTER TABLE daily_log ADD COLUMN pain_episodes TEXT NOT NULL DEFAULT '[]'");
+  }
+  const hasNotesColumn = columns.some((row) => row[1] === "notes");
+  if (!hasNotesColumn) {
+    db.exec("ALTER TABLE daily_log ADD COLUMN notes TEXT NOT NULL DEFAULT ''");
+  }
 
   // Devices with a DB created before pain_level was made optional (retro
   // logs without a remembered pain level): SQLite can't relax a NOT NULL
   // constraint with ALTER TABLE, so rebuild the table when it's still set.
+  // Runs after the ALTER TABLEs above so daily_log already has every column
+  // by the time it's copied into the rebuilt table.
   const painLevelCol = columns.find((row) => row[1] === "pain_level");
   const painLevelIsNotNull = painLevelCol ? painLevelCol[3] === 1 : false;
   if (painLevelIsNotNull) {
@@ -46,6 +59,7 @@ export function initDailyLogSchema(db: Database): void {
         date TEXT PRIMARY KEY,
         pain_level INTEGER,
         pain_locations TEXT NOT NULL DEFAULT '[]',
+        pain_episodes TEXT NOT NULL DEFAULT '[]',
         activity_level INTEGER,
         lie_down_need INTEGER,
         sports TEXT NOT NULL DEFAULT '[]',
@@ -54,18 +68,19 @@ export function initDailyLogSchema(db: Database): void {
         food_quantity TEXT,
         food_quality TEXT,
         food_tags TEXT NOT NULL DEFAULT '[]',
+        notes TEXT NOT NULL DEFAULT '',
         updated_at TEXT NOT NULL,
         deleted INTEGER NOT NULL DEFAULT 0
       )
     `);
     db.exec(`
       INSERT INTO daily_log_new
-        (date, pain_level, pain_locations, activity_level, lie_down_need,
-         sports, period, sex, food_quantity, food_quality, food_tags,
+        (date, pain_level, pain_locations, pain_episodes, activity_level, lie_down_need,
+         sports, period, sex, food_quantity, food_quality, food_tags, notes,
          updated_at, deleted)
       SELECT
-        date, pain_level, pain_locations, activity_level, lie_down_need,
-        sports, period, sex, food_quantity, food_quality, food_tags,
+        date, pain_level, pain_locations, pain_episodes, activity_level, lie_down_need,
+        sports, period, sex, food_quantity, food_quality, food_tags, notes,
         updated_at, deleted
       FROM daily_log
     `);
@@ -79,6 +94,7 @@ function rowToEntry(row: Record<string, unknown>): DailyEntry {
     date: row.date as string,
     painLevel: row.pain_level as PainLevel | null,
     painLocations: JSON.parse(row.pain_locations as string),
+    painEpisodes: JSON.parse(row.pain_episodes as string) as PainEpisode[],
     activityLevel: row.activity_level as ScaleLevel | null,
     lieDownNeed: row.lie_down_need as ScaleLevel | null,
     sports: JSON.parse(row.sports as string),
@@ -89,6 +105,7 @@ function rowToEntry(row: Record<string, unknown>): DailyEntry {
       quality: row.food_quality as FoodQuality | null,
       tags: JSON.parse(row.food_tags as string),
     },
+    notes: row.notes as string,
   };
 }
 
@@ -117,13 +134,14 @@ export function upsertEntry(
 ): string {
   db.run(
     `INSERT OR REPLACE INTO daily_log
-      (date, pain_level, pain_locations, activity_level, lie_down_need,
-       sports, period, sex, food_quantity, food_quality, food_tags, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (date, pain_level, pain_locations, pain_episodes, activity_level, lie_down_need,
+       sports, period, sex, food_quantity, food_quality, food_tags, notes, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       entry.date,
       entry.painLevel,
       JSON.stringify(entry.painLocations),
+      JSON.stringify(entry.painEpisodes),
       entry.activityLevel,
       entry.lieDownNeed,
       JSON.stringify(entry.sports),
@@ -132,6 +150,7 @@ export function upsertEntry(
       entry.food.quantity,
       entry.food.quality,
       JSON.stringify(entry.food.tags),
+      entry.notes,
       updatedAt,
     ],
   );

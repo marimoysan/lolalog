@@ -26,6 +26,30 @@ export type SportEntry = {
   intensity: ScaleLevel | null;
 };
 
+export const PAIN_EPISODE_TRIGGERS = [
+  "Caminando",
+  "Recién despertada",
+  "De pie",
+  "Sentada",
+  "Otro",
+] as const;
+export type PainEpisodeTrigger = (typeof PAIN_EPISODE_TRIGGERS)[number];
+
+export const PAIN_EPISODE_SYMPTOMS = [
+  "Ardor",
+  "Dolor fuerte",
+  "Molestia",
+  "Otros",
+] as const;
+
+export type PainEpisode = {
+  id: string;
+  timestamp: string; // ISO 8601, set when the episode is added
+  trigger: PainEpisodeTrigger | null;
+  symptoms: string[];
+  note: string;
+};
+
 export type FoodQuantity = "poco" | "normal" | "mucho";
 export type FoodQuality = "unhealthy" | "medium" | "healthy";
 
@@ -60,12 +84,14 @@ export type DailyEntry = {
   // pain wasn't recalled), distinct from 0 = explicitly "no pain".
   painLevel: PainLevel | null;
   painLocations: string[];
+  painEpisodes: PainEpisode[];
   activityLevel: ScaleLevel | null;
   lieDownNeed: ScaleLevel | null;
   sports: SportEntry[];
   period: boolean;
   sex: boolean;
   food: FoodLog;
+  notes: string;
 };
 
 export function emptyFoodLog(): FoodLog {
@@ -77,11 +103,13 @@ export function emptyEntry(date: string): DailyEntry {
     date,
     painLevel: null,
     painLocations: [],
+    painEpisodes: [],
     activityLevel: null,
     lieDownNeed: null,
     sports: [],
     period: false,
     sex: false,
     food: emptyFoodLog(),
+    notes: "",
   };
 }

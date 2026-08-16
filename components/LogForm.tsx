@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -11,12 +11,14 @@ import { ScaleInput } from "@/components/ScaleInput";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { TagCloud } from "@/components/TagCloud";
 import { SportPicker } from "@/components/SportPicker";
+import { PainEpisodePicker } from "@/components/PainEpisodePicker";
 import { NO_PAIN } from "@/lib/pain-scale";
 import { FOOD_TAGS, PAIN_LOCATIONS } from "@/lib/types";
 import type {
   PainLevel,
   ScaleLevel,
   SportEntry,
+  PainEpisode,
   FoodQuantity,
   FoodQuality,
 } from "@/lib/types";
@@ -40,14 +42,14 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
   const { getEntry, saveEntry, deleteEntry } = useEntries();
   const existing = getEntry(date);
 
-  // History days skip the "already registered" summary screen and open
-  // straight into the editable form; only today keeps that intermediate step.
-  const [editing, setEditing] = useState(!existing || !isToday);
   const [painLevel, setPainLevel] = useState<PainLevel | null>(
     existing?.painLevel ?? null,
   );
   const [painLocations, setPainLocations] = useState<string[]>(
     existing?.painLocations ?? [],
+  );
+  const [painEpisodes, setPainEpisodes] = useState<PainEpisode[]>(
+    existing?.painEpisodes ?? [],
   );
   const [activityLevel, setActivityLevel] = useState<ScaleLevel | null>(
     existing?.activityLevel ?? null,
@@ -69,15 +71,13 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
     existing?.food.quality ?? null,
   );
   const [foodTags, setFoodTags] = useState<string[]>(existing?.food.tags ?? []);
+  const [notes, setNotes] = useState(existing?.notes ?? "");
 
-  // Today stays on the page and flips to the celebration screen; any other
-  // day (opened from Historial) always returns there instead.
+  // Today's log stays open all day (it gets added to throughout the day),
+  // so saving just leaves you where you are; any other day (opened from
+  // Historial) goes back there instead.
   function finishEditing() {
-    if (isToday) {
-      setEditing(false);
-    } else {
-      router.push("/history");
-    }
+    if (!isToday) router.push("/history");
   }
 
   // painLevel is no longer the sole required field — a retrospective log
@@ -86,6 +86,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
   const hasAnyData =
     painLevel !== null ||
     painLocations.length > 0 ||
+    painEpisodes.length > 0 ||
     activityLevel !== null ||
     lieDownNeed !== null ||
     sports.length > 0 ||
@@ -93,7 +94,24 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
     sex !== null ||
     foodQuantity !== null ||
     foodQuality !== null ||
-    foodTags.length > 0;
+    foodTags.length > 0 ||
+    notes.trim() !== "";
+
+  function buildEntry() {
+    return {
+      date,
+      painLevel,
+      painLocations,
+      painEpisodes,
+      activityLevel,
+      lieDownNeed,
+      sports,
+      period: period === "si",
+      sex: sex === "si",
+      food: { quantity: foodQuantity, quality: foodQuality, tags: foodTags },
+      notes,
+    };
+  }
 
   function handleSubmit() {
     if (!hasAnyData) {
@@ -106,23 +124,63 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
       }
       return;
     }
-    saveEntry({
-      date,
-      painLevel,
-      painLocations,
-      activityLevel,
-      lieDownNeed,
-      sports,
-      period: period === "si",
-      sex: sex === "si",
-      food: { quantity: foodQuantity, quality: foodQuality, tags: foodTags },
-    });
+    saveEntry(buildEntry());
     finishEditing();
   }
+
+  // Today's log autosaves (debounced) instead of needing an explicit Guardar
+  // tap, since it's meant to be revisited and added to all day. History days
+  // keep the manual button below — those are one-shot edits, not a running
+  // log, so an explicit save (and the "Vaciar todo" it enables) fits better.
+  const [autosaveStatus, setAutosaveStatus] = useState<"idle" | "pending" | "saved">("idle");
+  // Baseline to detect "has anything actually changed since the page
+  // loaded" — computed once, lazily, during the first render. A boolean
+  // "have I run yet" ref doesn't work here: React Strict Mode fires this
+  // effect twice in dev, and the throwaway first call consumes it, making
+  // the debounced save show as already "pending" on load.
+  const initialSnapshot = useRef<string | null>(null);
+  if (initialSnapshot.current === null) {
+    initialSnapshot.current = JSON.stringify(buildEntry());
+  }
+
+  useEffect(() => {
+    if (!isToday) return;
+    if (JSON.stringify(buildEntry()) === initialSnapshot.current) return;
+    setAutosaveStatus("pending");
+    const timeout = setTimeout(() => {
+      if (hasAnyData) {
+        saveEntry(buildEntry());
+      } else if (existing) {
+        deleteEntry(date);
+      }
+      setAutosaveStatus("saved");
+    }, 800);
+    return () => clearTimeout(timeout);
+    // existing/hasAnyData/saveEntry/deleteEntry are read fresh from this
+    // render's closure on purpose — they come from EntriesProvider, whose
+    // functions get a new identity on every save, so listing them here
+    // would re-trigger this effect on every autosave and loop forever.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    isToday,
+    painLevel,
+    painLocations,
+    painEpisodes,
+    activityLevel,
+    lieDownNeed,
+    sports,
+    period,
+    sex,
+    foodQuantity,
+    foodQuality,
+    foodTags,
+    notes,
+  ]);
 
   function clearAll() {
     setPainLevel(null);
     setPainLocations([]);
+    setPainEpisodes([]);
     setActivityLevel(null);
     setLieDownNeed(null);
     setSports([]);
@@ -131,21 +189,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
     setFoodQuantity(null);
     setFoodQuality(null);
     setFoodTags([]);
-  }
-
-  function startEdit() {
-    if (!existing) return;
-    setPainLevel(existing.painLevel);
-    setPainLocations(existing.painLocations);
-    setActivityLevel(existing.activityLevel);
-    setLieDownNeed(existing.lieDownNeed);
-    setSports(existing.sports);
-    setPeriod(existing.period ? "si" : "no");
-    setSex(existing.sex ? "si" : "no");
-    setFoodQuantity(existing.food.quantity);
-    setFoodQuality(existing.food.quality);
-    setFoodTags(existing.food.tags);
-    setEditing(true);
+    setNotes("");
   }
 
   function toggleFoodTag(tag: string) {
@@ -159,25 +203,6 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
       prev.includes(location)
         ? prev.filter((l) => l !== location)
         : [...prev, location],
-    );
-  }
-
-  // Only reachable for today: history days always start with editing=true
-  // and finishEditing() navigates away from them instead of clearing it.
-  if (existing && !editing) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-        <DateHeader date={date} isToday={isToday} />
-        <p className="text-4xl">🎉</p>
-        <p className="text-neutral-500">Ya registraste hoy.</p>
-        <button
-          type="button"
-          onClick={startEdit}
-          className="mt-2 rounded-xl border border-neutral-700 px-4 py-2 text-sm"
-        >
-          Editar
-        </button>
-      </div>
     );
   }
 
@@ -234,6 +259,10 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
           />
         </Field>
       )}
+
+      <Field label="Episodios de dolor">
+        <PainEpisodePicker value={painEpisodes} onChange={setPainEpisodes} />
+      </Field>
 
       <hr className="my-4 border-neutral-800" />
       <h2 className="text-lg font-medium">Actividad diaria</h2>
@@ -294,14 +323,34 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
         <TagCloud tags={FOOD_TAGS} selected={foodTags} onToggle={toggleFoodTag} />
       </Field>
 
-      <button
-        type="button"
-        onClick={handleSubmit}
-        disabled={!hasAnyData && !existing}
-        className="rounded-xl bg-brand-green py-3 text-center text-sm font-medium text-white disabled:opacity-40"
-      >
-        Guardar
-      </button>
+      <Field label="Notas">
+        <textarea
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Cualquier otra cosa que quieras añadir"
+          rows={3}
+          className="resize-none rounded-xl border border-neutral-700 bg-transparent p-3 text-sm placeholder:text-neutral-600"
+        />
+      </Field>
+
+      {isToday ? (
+        <p className="text-center text-xs text-neutral-500" aria-live="polite">
+          {autosaveStatus === "pending"
+            ? "Guardando…"
+            : autosaveStatus === "saved"
+              ? "Guardado"
+              : "Se guarda automáticamente"}
+        </p>
+      ) : (
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={!hasAnyData && !existing}
+          className="rounded-xl bg-brand-green py-3 text-center text-sm font-medium text-white disabled:opacity-40"
+        >
+          Guardar
+        </button>
+      )}
     </div>
   );
 }
