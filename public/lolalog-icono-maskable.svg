@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Icono de LolaLog">
+  <title>Icono de LolaLog</title>
+  <rect x="0" y="0" width="1024" height="1024" fill="#0F6E56"/>
+  <circle cx="288.8" cy="288.8" r="60.8" fill="#FFFFFF"/>
+  <circle cx="512" cy="288.8" r="60.8" fill="#FFFFFF"/>
+  <circle cx="735.2" cy="288.8" r="60.8" fill="#FFFFFF"/>
+  <circle cx="288.8" cy="512" r="60.8" fill="#FFFFFF"/>
+  <circle cx="512" cy="512" r="60.8" fill="#FFFFFF"/>
+  <circle cx="735.2" cy="512" r="60.8" fill="#F0997B"/>
+  <circle cx="288.8" cy="735.2" r="60.8" fill="#FFFFFF"/>
+  <circle cx="512" cy="735.2" r="60.8" fill="#FFFFFF"/>
+  <circle cx="735.2" cy="735.2" r="60.8" fill="#FFFFFF"/>
+</svg>
