@@ -25,6 +25,7 @@ export function initDailyLogSchema(db: Database): void {
       sports TEXT NOT NULL DEFAULT '[]',
       period INTEGER NOT NULL DEFAULT 0,
       sex INTEGER NOT NULL DEFAULT 0,
+      alcohol INTEGER NOT NULL DEFAULT 0,
       food_quantity TEXT,
       food_quality TEXT,
       food_tags TEXT NOT NULL DEFAULT '[]',
@@ -50,6 +51,10 @@ export function initDailyLogSchema(db: Database): void {
   if (!hasNotesColumn) {
     db.exec("ALTER TABLE daily_log ADD COLUMN notes TEXT NOT NULL DEFAULT ''");
   }
+  const hasAlcoholColumn = columns.some((row) => row[1] === "alcohol");
+  if (!hasAlcoholColumn) {
+    db.exec("ALTER TABLE daily_log ADD COLUMN alcohol INTEGER NOT NULL DEFAULT 0");
+  }
 
   // Devices with a DB created before pain_level was made optional (retro
   // logs without a remembered pain level): SQLite can't relax a NOT NULL
@@ -70,6 +75,7 @@ export function initDailyLogSchema(db: Database): void {
         sports TEXT NOT NULL DEFAULT '[]',
         period INTEGER NOT NULL DEFAULT 0,
         sex INTEGER NOT NULL DEFAULT 0,
+        alcohol INTEGER NOT NULL DEFAULT 0,
         food_quantity TEXT,
         food_quality TEXT,
         food_tags TEXT NOT NULL DEFAULT '[]',
@@ -81,11 +87,11 @@ export function initDailyLogSchema(db: Database): void {
     db.exec(`
       INSERT INTO daily_log_new
         (date, pain_level, pain_locations, pain_episodes, activity_level, lie_down_need,
-         sports, period, sex, food_quantity, food_quality, food_tags, notes,
+         sports, period, sex, alcohol, food_quantity, food_quality, food_tags, notes,
          updated_at, deleted)
       SELECT
         date, pain_level, pain_locations, pain_episodes, activity_level, lie_down_need,
-        sports, period, sex, food_quantity, food_quality, food_tags, notes,
+        sports, period, sex, alcohol, food_quantity, food_quality, food_tags, notes,
         updated_at, deleted
       FROM daily_log
     `);
@@ -104,6 +110,7 @@ function rowToEntry(row: Record<string, unknown>): DailyEntry {
     sports: JSON.parse(row.sports as string),
     period: Boolean(row.period),
     sex: Boolean(row.sex),
+    alcohol: Boolean(row.alcohol),
     food: {
       quantity: row.food_quantity as FoodQuantity | null,
       quality: row.food_quality as FoodQuality | null,
@@ -111,6 +118,21 @@ function rowToEntry(row: Record<string, unknown>): DailyEntry {
     },
     notes: row.notes as string,
   });
+}
+
+// "Alcohol" used to live in food.tags before it became its own boolean
+// field. Old rows saved before that change still have the string sitting in
+// their food_tags JSON, invisible in the UI since TagCloud only renders
+// FOOD_TAGS options. Called once per entry on load (see entries-store.tsx);
+// cheap and idempotent, same pattern as the schema ALTER TABLEs above, so
+// it's safe to leave in permanently rather than treat as a run-once script.
+export function migrateAlcoholTag(entry: DailyEntry): DailyEntry | null {
+  if (!entry.food.tags.includes("Alcohol")) return null;
+  return {
+    ...entry,
+    alcohol: true,
+    food: { ...entry.food, tags: entry.food.tags.filter((tag) => tag !== "Alcohol") },
+  };
 }
 
 export function getAllEntries(db: Database): Record<string, DailyEntry> {
@@ -139,8 +161,8 @@ export function upsertEntry(
   db.run(
     `INSERT OR REPLACE INTO daily_log
       (date, pain_level, pain_episodes, activity_level, lie_down_need,
-       sports, period, sex, food_quantity, food_quality, food_tags, notes, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       sports, period, sex, alcohol, food_quantity, food_quality, food_tags, notes, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       entry.date,
       entry.painLevel,
@@ -150,6 +172,7 @@ export function upsertEntry(
       JSON.stringify(entry.sports),
       entry.period ? 1 : 0,
       entry.sex ? 1 : 0,
+      entry.alcohol ? 1 : 0,
       entry.food.quantity,
       entry.food.quality,
       JSON.stringify(entry.food.tags),

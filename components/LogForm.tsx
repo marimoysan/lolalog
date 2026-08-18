@@ -13,7 +13,7 @@ import { TagCloud } from "@/components/TagCloud";
 import { SportPicker } from "@/components/SportPicker";
 import { PainEpisodePicker } from "@/components/PainEpisodePicker";
 import { NO_PAIN } from "@/lib/pain-scale";
-import { FOOD_TAGS } from "@/lib/types";
+import { FOOD_TAGS, FOOD_TAG_HINTS } from "@/lib/types";
 import type {
   PainLevel,
   ScaleLevel,
@@ -61,6 +61,9 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
   const [sex, setSex] = useState<"si" | "no" | null>(
     existing ? (existing.sex ? "si" : "no") : null,
   );
+  const [alcohol, setAlcohol] = useState<"si" | "no" | null>(
+    existing ? (existing.alcohol ? "si" : "no") : null,
+  );
   const [foodQuantity, setFoodQuantity] = useState<FoodQuantity | null>(
     existing?.food.quantity ?? null,
   );
@@ -88,6 +91,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
     sports.length > 0 ||
     period !== null ||
     sex !== null ||
+    alcohol !== null ||
     foodQuantity !== null ||
     foodQuality !== null ||
     foodTags.length > 0 ||
@@ -103,6 +107,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
       sports,
       period: period === "si",
       sex: sex === "si",
+      alcohol: alcohol === "si",
       food: { quantity: foodQuantity, quality: foodQuality, tags: foodTags },
       notes,
     };
@@ -165,6 +170,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
     sports,
     period,
     sex,
+    alcohol,
     foodQuantity,
     foodQuality,
     foodTags,
@@ -179,6 +185,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
     setSports([]);
     setPeriod(null);
     setSex(null);
+    setAlcohol(null);
     setFoodQuantity(null);
     setFoodQuality(null);
     setFoodTags([]);
@@ -252,6 +259,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
           value={lieDownNeed}
           onChange={setLieDownNeed}
           ariaLabelPrefix="Necesidad de tumbarme"
+          allowNull
         />
       </Field>
 
@@ -292,7 +300,16 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
       </Field>
 
       <Field label="Comida — qué comiste">
-        <TagCloud tags={FOOD_TAGS} selected={foodTags} onToggle={toggleFoodTag} />
+        <TagCloud
+          tags={FOOD_TAGS}
+          selected={foodTags}
+          onToggle={toggleFoodTag}
+          hints={FOOD_TAG_HINTS}
+        />
+      </Field>
+
+      <Field label="Alcohol">
+        <ChoiceGroup options={[...YES_NO]} value={alcohol} onChange={setAlcohol} />
       </Field>
 
       <Field label="Notas">

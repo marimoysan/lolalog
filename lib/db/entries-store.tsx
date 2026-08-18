@@ -9,6 +9,7 @@ import {
   deleteEntry as deleteEntryRow,
   getAllEntries,
   initDailyLogSchema,
+  migrateAlcoholTag,
   upsertEntry,
 } from "@/lib/db/daily-log";
 import { syncOnLoad, syncPush, syncPushDelete } from "@/lib/sync/sync";
@@ -30,7 +31,23 @@ export function EntriesProvider({ children }: { children: ReactNode }) {
     (async () => {
       const db = await getDb();
       initDailyLogSchema(db);
-      setEntries(getAllEntries(db));
+      const loaded = getAllEntries(db);
+
+      // One-time-per-entry data migration: pull "Alcohol" out of any old
+      // food.tags into the new alcohol field. Runs before first paint so
+      // the UI never shows the pre-migration shape.
+      let migratedAny = false;
+      for (const [date, entry] of Object.entries(loaded)) {
+        const migrated = migrateAlcoholTag(entry);
+        if (!migrated) continue;
+        loaded[date] = migrated;
+        migratedAny = true;
+        const updatedAt = upsertEntry(db, migrated);
+        syncPush(migrated, updatedAt).catch(() => {});
+      }
+      if (migratedAny) await persist();
+
+      setEntries(loaded);
       setReady(true);
 
       // Runs after setReady(true): never blocks first paint or offline use.

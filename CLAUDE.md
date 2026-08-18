@@ -80,35 +80,58 @@ métricas al mismo Dashboard (actividad, deporte, ciclo, comida...).
   escucha teclado físico (dígitos/Backspace) para uso en desktop.
 - **Nav inferior** ([components/BottomNav.tsx](components/BottomNav.tsx)):
   Dashboard / Log (default, `/`) / Historial, con iconos de `lucide-react`.
+- **Swipe entre pestañas** ([components/SwipeNav.tsx](components/SwipeNav.tsx)):
+  Dashboard/Log/Historial también se cambian arrastrando horizontalmente,
+  no solo con el nav inferior. Implementado como carrusel: los tres viven
+  siempre montados a la vez en una tira `flex` (no dependen de que Next.js
+  monte/desmonte la ruta activa) — así la pantalla vecina ya está ahí,
+  visible, desde el primer píxel de arrastre, en vez de aparecer de golpe
+  cuando termina la navegación. Cada uno hace scroll vertical de forma
+  independiente (`overflow-y-auto` propio) en vez de la página entera —
+  por eso `body` es `h-dvh overflow-hidden` en `layout.tsx` (no
+  `min-h-dvh`): no hay scroll de documento, cada pantalla es su propio
+  contenedor con scroll. Efecto secundario intencional: cambiar de pestaña
+  conserva la posición de scroll y el estado local (p. ej. un form a medio
+  rellenar) de las otras dos. Rutas fuera de esas tres (`/history/[date]`,
+  `/sync`) no son swipeables, se renderizan normal sin la tira. El nav
+  inferior y el swipe comparten la misma animación, así que tocar un icono
+  también desliza en vez de saltar de golpe.
 - **Log** ([components/LogForm.tsx](components/LogForm.tsx)): una sola
   pantalla reutilizada tanto para hoy (`/`) como para cualquier día pasado
   (`/history/[date]`) — solo cambia qué `date` recibe, vía la prop
   `isToday`. El estado logged/not-logged se deriva de si existe fila
   (no borrada) para esa fecha, no de un flag aparte. Comportamiento distinto
   por `isToday`:
-  - **Hoy**: si ya hay entrada, muestra una celebración + botón "Editar"
-    antes de abrir el form; al guardar, se queda en esa misma pantalla
-    (vuelve a mostrar la celebración).
-  - **Día pasado**: se salta la celebración y abre directo en modo edición
-    (precargado si ya había datos); tiene una barra superior con enlace
-    "← Historial" y, si el día ya tenía entrada, un botón "Vaciar todo" que
-    resetea el form a blanco. Guardar con *todos* los campos en blanco sobre
-    un día que ya existía borra la entrada (vuelve a "Sin registrar") en vez
-    de guardar — `painLevel` solo, por sí solo, ya no dispara esto (ver
-    esquema de `DailyEntry` debajo); guardar (con o sin borrar) siempre
-    navega de vuelta a `/history`, no a `/`.
+  - **Hoy**: siempre abierto en modo edición, sin pantalla intermedia de
+    "ya registraste hoy" — se vuelve a lo largo del día para ampliar o
+    corregir (p. ej. añadir otro episodio de dolor más tarde). Autoguarda
+    con debounce (~800ms tras el último cambio) en vez de tener botón
+    "Guardar"; un texto bajo el form indica el estado ("Se guarda
+    automáticamente" / "Guardando…" / "Guardado").
+  - **Día pasado**: abre directo en modo edición (precargado si ya había
+    datos); tiene una barra superior con enlace "← Historial", un botón
+    "Guardar" manual (a diferencia de hoy: es una edición puntual, no un
+    registro que se reabre) y, si el día ya tenía entrada, un botón
+    "Vaciar todo" que resetea el form a blanco. Guardar con *todos* los
+    campos en blanco sobre un día que ya existía borra la entrada (vuelve a
+    "Sin registrar") en vez de guardar — `painLevel` solo, por sí solo, ya
+    no dispara esto (ver esquema de `DailyEntry` debajo); guardar (con o
+    sin borrar) siempre navega de vuelta a `/history`, no a `/`.
 - **Historial** ([components/HistoryList.tsx](components/HistoryList.tsx)):
   últimos 30 días, incluyendo huecos "Sin registrar". Tap en el día de hoy
   enlaza directo a `/` (no a `/history/[date]`); tap en cualquier otro día
   abre el Log en esa fecha, directo en modo edición (ver arriba).
-- **Dashboard** ([app/dashboard/page.tsx](app/dashboard/page.tsx)): primer
-  MVP — gráfica de dolor por día ([components/PainChart.tsx](components/PainChart.tsx),
-  SVG propio sin librería), tabs Última semana / Último mes / Custom
-  (`ChoiceGroup` reutilizado; Custom revela un mini-form con dos
-  `<input type="date">` + "Aplicar"). Eje Y fijo 0–5 sin números; los puntos
-  usan los mismos colores/labels de `lib/pain-scale.ts` que el resto de la
-  app; días sin registrar quedan como hueco en la línea, no como 0. Arrastrar
-  sobre la gráfica (mouse o touch, vía Pointer Events) muestra un crosshair +
+- **Dashboard** ([components/DashboardView.tsx](components/DashboardView.tsx)
+  — montado directamente por `SwipeNav` para el carrusel;
+  `app/dashboard/page.tsx` es solo un wrapper fino para cuando se navega o
+  recarga directo a esa ruta): primer MVP — gráfica de dolor por día
+  ([components/PainChart.tsx](components/PainChart.tsx), SVG propio sin
+  librería), tabs Última semana / Último mes / Custom (`ChoiceGroup`
+  reutilizado; Custom revela un mini-form con dos `<input type="date">` +
+  "Aplicar"). Eje Y fijo 0–5 sin números; los puntos usan los mismos
+  colores/labels de `lib/pain-scale.ts` que el resto de la app; días sin
+  registrar quedan como hueco en la línea, no como 0. Arrastrar sobre la
+  gráfica (mouse o touch, vía Pointer Events) muestra un crosshair +
   tooltip con la fecha y el nivel (o "Sin registrar").
 
 ### Esquema actual de `DailyEntry` ([lib/types.ts](lib/types.ts))
@@ -132,15 +155,32 @@ retrospectiva sin acordarte del dolor de ese día es válido):
 - `activityLevel`, `lieDownNeed`: escalas genéricas 1-5
 - `sports: SportEntry[]` — lista libre (añadir/quitar), cada uno con tipo
   (`SPORT_TYPES`) + intensidad 1-5
-- `period`, `sex`: booleanos (Sí/No)
+- `period`, `sex`, `alcohol`: booleanos (Sí/No) — `alcohol` vivió dentro de
+  `food.tags` originalmente; se sacó a campo independiente para poder
+  trackearlo aparte de qué se comió.
 - `food: { quantity, quality, tags[] }` — cantidad y calidad de 3 opciones,
-  tags multiselect (`FOOD_TAGS`)
+  tags multiselect (`FOOD_TAGS`; `FOOD_TAG_HINTS` mapea algún tag, de
+  momento solo "Gluten", a un texto explicativo — `TagCloud` lo muestra como
+  hint plegado tras un icono de info junto al chip, tap para abrir/cerrar en
+  vez de un `title` con hover, porque esta es una app táctil)
 - `notes: string` — notas libres al final del registro, para lo que no
   encaje en ningún otro campo
 
 La columna SQLite `pain_locations` (ubicación a nivel de día, versión previa
 a moverla dentro de `painEpisodes`) sigue en el schema pero ya no se lee ni
 se escribe — ver comentario en `initDailyLogSchema`.
+
+Los arrays/objetos anidados dentro de `DailyEntry` (como `PainEpisode`) no
+tienen migración de columna SQL propia — viven serializados como JSON dentro
+de una sola columna TEXT. Si se le añade un campo nuevo a `PainEpisode` (o a
+cualquier otro tipo anidado), las entradas ya guardadas antes de ese cambio
+vuelven de SQLite/sync sin ese campo (`undefined`, no vacío) y pueden romper
+al iterarlas. `normalizeEntry` en [lib/types.ts](lib/types.ts) rellena esos
+huecos con valores por defecto; se aplica en los dos puntos donde una
+`DailyEntry` entra a la app (`rowToEntry` en `daily-log.ts` y tras
+`decryptEntry` en `syncOnLoad`) — seguir el mismo patrón (añadir el default
+ahí, no en cada sitio donde se lee el campo) la próxima vez que se amplíe
+`PainEpisode` o similar.
 
 ### Sistema de inputs (reutilizar, no crear inputs ad-hoc nuevos)
 
@@ -154,11 +194,16 @@ se escribe — ver comentario en `initDailyLogSchema`.
 - [ScaleInput.tsx](components/ScaleInput.tsx): escala genérica 1-5 en
   píldoras numeradas, para todo lo que NO sea dolor (actividad, necesidad de
   tumbarme, intensidad de deporte). Deliberadamente distinta visualmente de
-  `PainScale`.
+  `PainScale`. Prop opcional `allowNull` añade una píldora "NA" que llama a
+  `onChange(null)`, para permitir borrar/marcar como no aplicable un campo ya
+  respondido — de momento solo activada en "Necesidad de tumbarme"; actividad
+  e intensidad de deporte no la usan.
 - [ChoiceGroup.tsx](components/ChoiceGroup.tsx): single-select genérico de N
   opciones string (Sí/No, cantidad, calidad de comida).
 - [TagCloud.tsx](components/TagCloud.tsx): multiselect genérico de chips
-  (tags de comida, ubicación del dolor).
+  (tags de comida, ubicación del dolor). Prop opcional `hints` (tag → texto)
+  añade un icono de info tras el chip que al tocarlo despliega ese texto
+  debajo de la nube — usado para explicar qué cuenta como "Gluten".
 - [SportPicker.tsx](components/SportPicker.tsx): lista de deportes
   añadir/quitar, cada fila con dropdown + `ScaleInput`.
 - [DateHeader.tsx](components/DateHeader.tsx): fecha apilada (día de la
@@ -198,7 +243,7 @@ marca, salvo "Sin dolor" que sí usa `brand-green`.
   de desktop separados.
 - Elementos pegados al borde de la pantalla (nav inferior, dialpad del PIN)
   usan `dvh` en vez de `vh`/`%` para la altura y `env(safe-area-inset-*)`
-  para el padding — ver `layout.tsx` (`min-h-dvh`, `viewportFit: "cover"`),
+  para el padding — ver `layout.tsx` (`h-dvh`, `viewportFit: "cover"`),
   `BottomNav.tsx` y `PinGate.tsx`. Necesario para que nada quede bajo el
   notch/home-indicator en la PWA instalada; seguir el mismo patrón en
   cualquier pantalla nueva que toque un borde.

@@ -8,10 +8,12 @@ export function ScaleInput({
   value,
   onChange,
   ariaLabelPrefix,
+  allowNull,
 }: {
   value: ScaleLevel | null;
-  onChange: (level: ScaleLevel) => void;
+  onChange: (level: ScaleLevel | null) => void;
   ariaLabelPrefix: string;
+  allowNull?: boolean;
 }) {
   return (
     <div className="flex gap-2">
@@ -30,6 +32,20 @@ export function ScaleInput({
           {level}
         </button>
       ))}
+      {allowNull && (
+        <button
+          type="button"
+          onClick={() => onChange(null)}
+          aria-label={`${ariaLabelPrefix} NA`}
+          className={`flex h-9 items-center justify-center rounded-full border px-3 text-sm transition-colors ${
+            value === null
+              ? "border-brand-green bg-brand-green font-medium text-white"
+              : "border-neutral-700 text-neutral-400"
+          }`}
+        >
+          NA
+        </button>
+      )}
     </div>
   );
 }

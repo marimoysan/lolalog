@@ -66,12 +66,17 @@ export const FOOD_TAGS = [
   "Lácteos",
   "Gluten",
   "Azúcar/dulces",
+  "Grasas",
   "Fritos",
   "Picante",
-  "Alcohol",
-  "Cafeína",
-  "Ultraprocesados",
 ] as const;
+
+// Shown as a tap-to-reveal hint next to the matching FOOD_TAGS chip (see
+// TagCloud's `hints` prop) — not every tag needs one.
+export const FOOD_TAG_HINTS: Partial<Record<(typeof FOOD_TAGS)[number], string>> = {
+  Gluten:
+    "Trigo, cebada, centeno y espelta, y lo hecho con ellos: pan, pasta, bollería, rebozados, cerveza. La avena solo si no está certificada sin gluten.",
+};
 
 export type FoodLog = {
   quantity: FoodQuantity | null;
@@ -90,6 +95,7 @@ export type DailyEntry = {
   sports: SportEntry[];
   period: boolean;
   sex: boolean;
+  alcohol: boolean;
   food: FoodLog;
   notes: string;
 };
@@ -127,6 +133,7 @@ export function emptyEntry(date: string): DailyEntry {
     sports: [],
     period: false,
     sex: false,
+    alcohol: false,
     food: emptyFoodLog(),
     notes: "",
   };
