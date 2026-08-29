@@ -12,6 +12,13 @@ export type DayBadge = { key: string; Icon: LucideIcon; label: string };
 
 export const BADGE_CLASS = "text-neutral-500";
 
+// Either a logged sport, or the activity scale maxed out (walking a lot
+// without a specific sport still counts) — shared with the Dashboard's
+// event overlay so both read this signal the same way.
+export function hasIntenseActivity(entry: DailyEntry): boolean {
+  return entry.activityLevel === 5 || entry.sports.length > 0;
+}
+
 export function dayBadges(entry: DailyEntry): DayBadge[] {
   const badges: DayBadge[] = [];
 
@@ -19,7 +26,7 @@ export function dayBadges(entry: DailyEntry): DayBadge[] {
     badges.push({ key: "period", Icon: Droplet, label: "Regla" });
   }
 
-  if (entry.activityLevel === 5 || entry.sports.length > 0) {
+  if (hasIntenseActivity(entry)) {
     badges.push({ key: "activity", Icon: Zap, label: "Actividad intensa" });
   }
 

@@ -3,9 +3,14 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
+import { DashboardFilters } from "@/components/DashboardFilters";
+import { DashboardGranularityPicker } from "@/components/DashboardGranularityPicker";
 import { PainChart } from "@/components/PainChart";
 import { useEntries } from "@/lib/db/entries-store";
 import { datesInRange, lastNDays, todayISO } from "@/lib/date";
+import { averagePainLevel, groupByMonth, groupByWeek, type CountPoint, type Granularity } from "@/lib/aggregate";
+import { hasIntenseActivity } from "@/lib/day-badges";
+import type { EventKey } from "@/lib/event-icons";
 
 type Preset = "week" | "month" | "custom";
 
@@ -22,6 +27,17 @@ const MAX_CUSTOM_DAYS = 366;
 export function DashboardView() {
   const { getEntry } = useEntries();
   const [preset, setPreset] = useState<Preset>("month");
+  const [granularity, setGranularity] = useState<Granularity>("day");
+  const [visibleSeries, setVisibleSeries] = useState<Set<EventKey>>(new Set());
+
+  function toggleSeries(key: EventKey) {
+    setVisibleSeries((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   const [customStart, setCustomStart] = useState(() => [...lastNDays(7)].at(-1)!);
   const [customEnd, setCustomEnd] = useState(() => todayISO());
@@ -38,7 +54,45 @@ export function DashboardView() {
     return datesInRange(start, end).slice(0, MAX_CUSTOM_DAYS);
   }, [preset, appliedCustom]);
 
-  const points = dates.map((date) => ({ date, painLevel: getEntry(date)?.painLevel ?? null }));
+  const chartData = useMemo(() => {
+    if (granularity === "day") {
+      const points = dates.map((date) => ({ date, painLevel: getEntry(date)?.painLevel ?? null }));
+      const periodFlags = dates.map((date) => getEntry(date)?.period ?? false);
+      const dayEvents = dates.map((date) => {
+        const entry = getEntry(date);
+        return {
+          sex: entry?.sex ?? false,
+          activity: entry ? hasIntenseActivity(entry) : false,
+          alcohol: entry?.alcohol ?? false,
+        };
+      });
+      return { points, periodFlags, dayEvents, bucketCounts: undefined };
+    }
+
+    const buckets = granularity === "week" ? groupByWeek(dates) : groupByMonth(dates);
+    const points = buckets.map(({ date, dates: bucketDates }) => ({
+      date,
+      painLevel: averagePainLevel(bucketDates.map((d) => getEntry(d)?.painLevel ?? null)),
+    }));
+    const bucketCounts: Record<EventKey, CountPoint[]> = {
+      sex: buckets.map(({ date, dates: bucketDates }) => ({
+        date,
+        count: bucketDates.filter((d) => getEntry(d)?.sex).length,
+      })),
+      activity: buckets.map(({ date, dates: bucketDates }) => ({
+        date,
+        count: bucketDates.filter((d) => {
+          const entry = getEntry(d);
+          return entry ? hasIntenseActivity(entry) : false;
+        }).length,
+      })),
+      alcohol: buckets.map(({ date, dates: bucketDates }) => ({
+        date,
+        count: bucketDates.filter((d) => getEntry(d)?.alcohol).length,
+      })),
+    };
+    return { points, periodFlags: undefined, dayEvents: undefined, bucketCounts };
+  }, [dates, granularity, getEntry]);
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -83,9 +137,21 @@ export function DashboardView() {
         </form>
       )}
 
+      <div className="flex gap-2">
+        <DashboardGranularityPicker value={granularity} onChange={setGranularity} />
+        <DashboardFilters visible={visibleSeries} onToggle={toggleSeries} />
+      </div>
+
       <div className="flex flex-col gap-2">
         <h2 className="text-sm text-neutral-500">Dolor</h2>
-        <PainChart points={points} />
+        <PainChart
+          points={chartData.points}
+          granularity={granularity}
+          periodFlags={chartData.periodFlags}
+          dayEvents={chartData.dayEvents}
+          bucketCounts={chartData.bucketCounts}
+          visibleSeries={visibleSeries}
+        />
       </div>
 
       <Link href="/sync" className="mt-auto text-sm text-neutral-500 underline">

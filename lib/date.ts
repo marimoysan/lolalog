@@ -74,3 +74,25 @@ export function datesInRange(start: string, end: string): string[] {
   }
   return dates;
 }
+
+export function addDays(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  return toLocalISODate(d);
+}
+
+// Monday of the ISO week containing `iso` (weeks read Monday-Sunday here,
+// matching the Spanish calendar convention).
+export function mondayOf(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  const day = d.getDay(); // 0 = domingo .. 6 = sábado
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return toLocalISODate(d);
+}
+
+// First day of the calendar month containing `iso`.
+export function firstOfMonth(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return toLocalISODate(new Date(d.getFullYear(), d.getMonth(), 1));
+}

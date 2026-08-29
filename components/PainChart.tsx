@@ -2,11 +2,14 @@
 
 import { useId, useMemo, useRef, useState, type PointerEvent } from "react";
 import { painLevelInfo } from "@/lib/pain-scale";
-import { formatDisplayDate } from "@/lib/date";
+import { buildAxisLabels, toLocalDate, tooltipDateLabel } from "@/lib/chart-axis";
+import { EVENT_META, PERIOD_SHADE_CLASS, type EventKey } from "@/lib/event-icons";
 import { smoothSegments } from "@/lib/chart-path";
+import type { CountPoint, Granularity } from "@/lib/aggregate";
 import type { PainLevel } from "@/lib/types";
 
 export type PainPoint = { date: string; painLevel: PainLevel | null };
+export type DayEvents = { sex: boolean; activity: boolean; alcohol: boolean };
 
 const VIEW_W = 400;
 const VIEW_H = 220;
@@ -17,14 +20,23 @@ const PLOT_W = VIEW_W - PAD_X * 2;
 const PLOT_H = VIEW_H - PAD_TOP - PAD_BOTTOM;
 const MAX_LEVEL = 5;
 
-// Spanish calendar-strip convention (miércoles = X, to not collide with martes).
-const WEEKDAY_LETTERS = ["D", "L", "M", "X", "J", "V", "S"];
+// Extra rows below the axis labels, one per active event type — only shown
+// for daily granularity. Weekly/monthly aggregates show the same series as
+// translucent bars overlaid on the plot area instead (see bucketCounts).
+const LANE_H = 16;
+const LANE_GAP = 6;
+const LANE_ICON_SIZE = 12;
+const LANE_KEYS: EventKey[] = ["sex", "activity", "alcohol"];
 
-type AxisLabel = { index: number; primary: string; secondary?: string };
-
-function toLocalDate(date: string): Date {
-  return new Date(`${date}T00:00:00`);
-}
+// Overlay bars: one thin bar per active series, side by side (not stacked)
+// within each bucket's column, with a small gap between the bars and a
+// bigger gap between buckets — and capped well below the plot's full
+// height so they read as texture near the baseline, not as a competing
+// chart on top of the pain line.
+const OVERLAY_BAR_OPACITY = 0.55;
+const OVERLAY_MAX_HEIGHT_RATIO = 0.4;
+const OVERLAY_GROUP_WIDTH_RATIO = 0.35; // fraction of the column width used by the group of bars
+const OVERLAY_BAR_GAP = 2;
 
 function isWeekend(date: string): boolean {
   const day = toLocalDate(date).getDay();
@@ -47,53 +59,37 @@ function dayHalfWidth(count: number): number {
   return PLOT_W / (count - 1) / 2;
 }
 
-// Few enough points that every day fits without collisions: label each one
-// with its weekday letter + day number instead of spreading out sparse ticks.
-const DENSE_LABEL_THRESHOLD = 10;
-const SPARSE_LABEL_COUNT = 8;
-
-// count <= 10: every day, "weekday letter" over "day number".
-// count > 10: ~8 evenly spread days, spelling out the full month name
-// whenever the month changes so the range never reads as bare numbers.
-function buildAxisLabels(points: PainPoint[]): AxisLabel[] {
-  const count = points.length;
-  if (count === 0) return [];
-
-  if (count <= DENSE_LABEL_THRESHOLD) {
-    return points.map((p, i) => ({
-      index: i,
-      primary: String(toLocalDate(p.date).getDate()),
-      secondary: WEEKDAY_LETTERS[toLocalDate(p.date).getDay()],
-    }));
-  }
-
-  const steps = SPARSE_LABEL_COUNT - 1;
-  const indices = new Set<number>();
-  for (let s = 0; s <= steps; s++) {
-    indices.add(Math.round((s / steps) * (count - 1)));
-  }
-
-  let lastMonth: number | null = null;
-  return [...indices]
-    .sort((a, b) => a - b)
-    .map((i) => {
-      const date = toLocalDate(points[i].date);
-      const month = date.getMonth();
-      const isNewMonth = lastMonth === null || month !== lastMonth;
-      lastMonth = month;
-      return {
-        index: i,
-        primary: String(date.getDate()),
-        secondary: isNewMonth
-          ? date.toLocaleDateString("es-ES", { month: "long" })
-          : undefined,
-      };
-    });
-}
+const ARIA_LABEL: Record<Granularity, string> = {
+  day: "Nivel de dolor por día",
+  week: "Nivel de dolor por semana",
+  month: "Nivel de dolor por mes",
+};
 
 type RunPoint = { x: number; y: number; level: PainLevel };
 
-export function PainChart({ points }: { points: PainPoint[] }) {
+export function PainChart({
+  points,
+  granularity = "day",
+  periodFlags,
+  dayEvents,
+  bucketCounts,
+  visibleSeries = new Set(),
+}: {
+  points: PainPoint[];
+  granularity?: Granularity;
+  // Parallel to `points`: true where that day has a registered period —
+  // drawn as background shading, not gated by visibleSeries (period isn't a
+  // togglable series). Only read for granularity === "day": aggregated into
+  // a week/month bucket, a handful of period days reads as a misleadingly
+  // solid block, so weekly/monthly views drop the shading entirely.
+  periodFlags?: boolean[];
+  // Parallel to `points`: only read for granularity === "day".
+  dayEvents?: DayEvents[];
+  // Parallel to `points`: only read for granularity !== "day" — per-bucket
+  // counts drawn as translucent overlay bars instead of lanes.
+  bucketCounts?: Partial<Record<EventKey, CountPoint[]>>;
+  visibleSeries?: Set<EventKey>;
+}) {
   const svgRef = useRef<SVGSVGElement>(null);
   const gradientId = useId();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
@@ -118,8 +114,12 @@ export function PainChart({ points }: { points: PainPoint[] }) {
     return groups;
   }, [points]);
 
-  const axisLabels = useMemo(() => buildAxisLabels(points), [points]);
+  const axisLabels = useMemo(() => buildAxisLabels(points, granularity), [points, granularity]);
   const halfWidth = dayHalfWidth(points.length);
+  const activeLaneKeys = granularity === "day" ? LANE_KEYS.filter((k) => visibleSeries.has(k)) : [];
+  const activeOverlayKeys =
+    granularity !== "day" ? LANE_KEYS.filter((k) => visibleSeries.has(k) && bucketCounts?.[k]) : [];
+  const totalHeight = VIEW_H + (activeLaneKeys.length > 0 ? activeLaneKeys.length * LANE_H + LANE_GAP : 0);
 
   function updateActiveFromClientX(clientX: number) {
     const svg = svgRef.current;
@@ -154,6 +154,7 @@ export function PainChart({ points }: { points: PainPoint[] }) {
   }
 
   const active = activeIndex !== null ? points[activeIndex] : null;
+  const activeLabel = active ? tooltipDateLabel(active.date, granularity) : null;
   const activeInfo = active && active.painLevel !== null ? painLevelInfo(active.painLevel) : null;
   const activePoint =
     activeIndex !== null && points[activeIndex].painLevel !== null
@@ -168,29 +169,46 @@ export function PainChart({ points }: { points: PainPoint[] }) {
     <div className="relative select-none">
       <svg
         ref={svgRef}
-        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+        viewBox={`0 0 ${VIEW_W} ${totalHeight}`}
         className="w-full touch-none"
         role="img"
-        aria-label="Nivel de dolor por día"
+        aria-label={ARIA_LABEL[granularity]}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={clearActive}
         onPointerCancel={clearActive}
         onPointerLeave={clearActive}
       >
-        {points.map((p, i) => {
-          if (!isWeekend(p.date)) return null;
-          return (
-            <rect
-              key={`weekend-${p.date}`}
-              x={xAt(i, points.length) - halfWidth}
-              y={PAD_TOP}
-              width={halfWidth * 2}
-              height={yAt(0) - PAD_TOP}
-              className="fill-neutral-500/10"
-            />
-          );
-        })}
+        {granularity === "day" &&
+          points.map((p, i) => {
+            if (!isWeekend(p.date)) return null;
+            return (
+              <rect
+                key={`weekend-${p.date}`}
+                x={xAt(i, points.length) - halfWidth}
+                y={PAD_TOP}
+                width={halfWidth * 2}
+                height={yAt(0) - PAD_TOP}
+                className="fill-neutral-500/10"
+              />
+            );
+          })}
+
+        {granularity === "day" &&
+          periodFlags &&
+          points.map((p, i) => {
+            if (!periodFlags[i]) return null;
+            return (
+              <rect
+                key={`period-${p.date}`}
+                x={xAt(i, points.length) - halfWidth}
+                y={PAD_TOP}
+                width={halfWidth * 2}
+                height={yAt(0) - PAD_TOP}
+                className={PERIOD_SHADE_CLASS}
+              />
+            );
+          })}
 
         {axisLabels.map(({ index }) => (
           <line
@@ -223,6 +241,41 @@ export function PainChart({ points }: { points: PainPoint[] }) {
             strokeWidth={1}
           />
         )}
+
+        {(() => {
+          const groupWidth = halfWidth * 2 * OVERLAY_GROUP_WIDTH_RATIO;
+          const slots = LANE_KEYS.length;
+          const barWidth = Math.max(0, (groupWidth - (slots - 1) * OVERLAY_BAR_GAP) / slots);
+          return activeOverlayKeys.map((key) => {
+            const counts = bucketCounts![key]!;
+            const maxCount = Math.max(1, ...counts.map((c) => c.count));
+            const meta = EVENT_META[key];
+            const slot = LANE_KEYS.indexOf(key);
+            return (
+              <g key={`overlay-${key}`}>
+                {points.map((p, i) => {
+                  const count = counts[i]?.count ?? 0;
+                  if (count === 0) return null;
+                  const h = (count / maxCount) * PLOT_H * OVERLAY_MAX_HEIGHT_RATIO;
+                  const x = xAt(i, points.length) - groupWidth / 2 + slot * (barWidth + OVERLAY_BAR_GAP);
+                  return (
+                    <rect
+                      key={`overlay-${key}-${p.date}`}
+                      x={x}
+                      y={yAt(0) - h}
+                      width={barWidth}
+                      height={h}
+                      rx={0.75}
+                      className={meta.textClass}
+                      fill="currentColor"
+                      opacity={OVERLAY_BAR_OPACITY}
+                    />
+                  );
+                })}
+              </g>
+            );
+          });
+        })()}
 
         {runs.map((run, ri) =>
           run.length === 1 ? (
@@ -302,6 +355,31 @@ export function PainChart({ points }: { points: PainPoint[] }) {
             </text>
           </g>
         ))}
+
+        {dayEvents &&
+          activeLaneKeys.map((key, li) => {
+            const meta = EVENT_META[key];
+            const laneY = VIEW_H + LANE_GAP + li * LANE_H + LANE_H / 2;
+            return (
+              <g key={key}>
+                {points.map((p, i) => {
+                  if (!dayEvents[i]?.[key]) return null;
+                  const x = xAt(i, points.length);
+                  return (
+                    <meta.Icon
+                      key={`${key}-${p.date}`}
+                      x={x - LANE_ICON_SIZE / 2}
+                      y={laneY - LANE_ICON_SIZE / 2}
+                      width={LANE_ICON_SIZE}
+                      height={LANE_ICON_SIZE}
+                      strokeWidth={1.75}
+                      className={meta.textClass}
+                    />
+                  );
+                })}
+              </g>
+            );
+          })}
       </svg>
 
       {active && (
@@ -309,7 +387,7 @@ export function PainChart({ points }: { points: PainPoint[] }) {
           className="pointer-events-none absolute top-0 -translate-x-1/2 whitespace-nowrap rounded-lg border border-neutral-700 bg-background px-2 py-1 text-xs shadow-sm"
           style={{ left: `${tooltipLeftPct}%` }}
         >
-          <p className="text-neutral-500">{formatDisplayDate(active.date)}</p>
+          <p className="text-neutral-500">{activeLabel}</p>
           {activeInfo ? (
             <p className={`flex items-center gap-1 font-medium ${activeInfo.textClass}`}>
               <activeInfo.Icon size={14} strokeWidth={1.75} />
