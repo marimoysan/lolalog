@@ -127,8 +127,8 @@ métricas al mismo Dashboard (actividad, deporte, ciclo, comida...).
   recarga directo a esa ruta): primer MVP — gráfica de dolor por día
   ([components/PainChart.tsx](components/PainChart.tsx), SVG propio sin
   librería), tabs Última semana / Último mes / Custom (`ChoiceGroup`
-  reutilizado; Custom revela un mini-form con dos `<input type="date">` +
-  "Aplicar"). Eje Y fijo 0–5 sin números; los puntos usan los mismos
+  reutilizado; Último mes por defecto; Custom revela un mini-form con dos
+  `<input type="date">` + "Aplicar"). Eje Y fijo 0–5 sin números; los puntos usan los mismos
   colores/labels de `lib/pain-scale.ts` que el resto de la app; días sin
   registrar quedan como hueco en la línea, no como 0. Arrastrar sobre la
   gráfica (mouse o touch, vía Pointer Events) muestra un crosshair +

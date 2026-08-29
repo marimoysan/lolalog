@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "node scripts/copy-sql-wasm.mjs"
+    "postinstall": "node scripts/copy-sql-wasm.mjs",
+    "seed:dummy": "node scripts/seed-dummy-month.mjs",
+    "preview:dummy": "node scripts/open-dummy-preview.mjs"
   },
   "dependencies": {
     "@upstash/redis": "^1.38.2",

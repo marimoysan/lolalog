@@ -43,3 +43,7 @@ next-env.d.ts
 # generated at install time, see scripts/copy-sql-wasm.mjs
 /public/sql-wasm.wasm
 /public/sql-wasm-browser.wasm
+
+# isolated Chromium profile used to preview the Dashboard with dummy data —
+# never the real diary, never synced, see scripts/seed-dummy-month.mjs
+/.dev-profile/
