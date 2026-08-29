@@ -128,11 +128,31 @@ métricas al mismo Dashboard (actividad, deporte, ciclo, comida...).
   ([components/PainChart.tsx](components/PainChart.tsx), SVG propio sin
   librería), tabs Última semana / Último mes / Custom (`ChoiceGroup`
   reutilizado; Último mes por defecto; Custom revela un mini-form con dos
-  `<input type="date">` + "Aplicar"). Eje Y fijo 0–5 sin números; los puntos usan los mismos
-  colores/labels de `lib/pain-scale.ts` que el resto de la app; días sin
-  registrar quedan como hueco en la línea, no como 0. Arrastrar sobre la
-  gráfica (mouse o touch, vía Pointer Events) muestra un crosshair +
-  tooltip con la fecha y el nivel (o "Sin registrar").
+  `<input type="date">` + "Aplicar"). Eje Y fijo 0–5 sin números; días sin
+  registrar quedan como hueco en la línea, no como 0 (huecos cortan la
+  línea — no se interpola por encima; probado lo contrario y revertido a
+  petición explícita). Arrastrar sobre la gráfica (mouse o touch, vía
+  Pointer Events) muestra un crosshair + tooltip con la fecha y el nivel (o
+  "Sin registrar").
+  - **Eje X**: sombreado de fondo en columnas de sábado/domingo, gridline
+    vertical en cada tick etiquetado, más ticks que una gráfica genérica
+    (todos los días si hay ≤10 puntos, ~8 repartidos si hay más). Etiquetas
+    adaptativas: ≤10 puntos muestra letra del día de la semana (convención
+    española L M X J V S D, X para no chocar con martes) sobre el número de
+    día; con más puntos muestra el número de día solo, y el nombre completo
+    del mes (no abreviado) aparece una vez en el primer tick y en cada
+    cambio de mes.
+  - **Línea**: color por gradiente en vez de puntos fijos — cada segmento
+    entre dos días consecutivos es un `<linearGradient>` de SVG que va del
+    color del nivel de dolor de un día al del siguiente (mismas clases de
+    `lib/pain-scale.ts`, vía `stop-color: currentColor` — no hay hex
+    duplicado). La curva es Catmull-Rom → Bézier
+    ([lib/chart-path.ts](lib/chart-path.ts), `smoothLinePath`/
+    `smoothSegments`) en vez de segmentos rectos, pensada para reusarse tal
+    cual cuando se superpongan más series (mood, cansancio...). No hay
+    punto fijo por día — solo un punto al hacer hover/arrastrar, y un punto
+    suelto para un día registrado que quedó aislado entre dos huecos (sin
+    vecino con el que formar un segmento que lleve el gradiente).
 
 ### Esquema actual de `DailyEntry` ([lib/types.ts](lib/types.ts))
 
@@ -244,6 +264,24 @@ elemento con identidad de marca en vez de colores Tailwind genéricos
 (`green-600`, etc.) — la única excepción es la escala de dolor
 (`lib/pain-scale.ts`), cuyos colores son semánticos (severidad), no de
 marca, salvo "Sin dolor" que sí usa `brand-green`.
+
+### Datos de prueba en local
+
+Para ver el Dashboard con datos sin tocar el diario real: `npm run
+seed:dummy` ([scripts/seed-dummy-month.mjs](scripts/seed-dummy-month.mjs))
+rellena un mes (dolor con onda orgánica + huecos, ánimo, actividad,
+cansancio, un bloque de regla, días sueltos de sexo/alcohol) tecleando en la
+UI real vía Playwright, en un perfil de Chromium aislado (`.dev-profile/`,
+gitignored) — no hay ningún atajo que escriba directo en IndexedDB. Sync
+nunca se configura en ese perfil, así que el push de `saveEntry` es un
+no-op garantizado (`isSyncConfigured()` en `lib/sync/key-store.ts`): no
+puede llegar a Redis ni a otros dispositivos. `npm run preview:dummy`
+([scripts/open-dummy-preview.mjs](scripts/open-dummy-preview.mjs)) reabre
+ese mismo perfil en el Dashboard sin re-sembrar. Ambos requieren `npm run
+dev` corriendo y fuerzan `colorScheme: "dark"` (Playwright no hereda el
+tema del SO); solo puede haber una ventana de ese perfil abierta a la vez
+(IndexedDB bloquea a nivel de proceso) — cerrar la anterior antes de
+relanzar cualquiera de los dos.
 
 ## Convenciones
 
