@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useRef, useState, type PointerEvent } from "react";
+import { useId, useMemo, useRef, useState, type PointerEvent } from "react";
 import { painLevelInfo } from "@/lib/pain-scale";
 import { formatDisplayDate } from "@/lib/date";
+import { smoothSegments } from "@/lib/chart-path";
 import type { PainLevel } from "@/lib/types";
 
 export type PainPoint = { date: string; painLevel: PainLevel | null };
@@ -90,27 +91,31 @@ function buildAxisLabels(points: PainPoint[]): AxisLabel[] {
     });
 }
 
+type RunPoint = { x: number; y: number; level: PainLevel };
+
 export function PainChart({ points }: { points: PainPoint[] }) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const gradientId = useId();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   const hasAnyData = points.some((p) => p.painLevel !== null);
 
-  // One "M...L...L..." subpath per run of consecutive registered days, so a
-  // gap (unregistered day) breaks the line instead of interpolating over it.
-  const linePath = useMemo(() => {
-    const segments: string[] = [];
-    let current: string[] = [];
+  // Runs of consecutive registered days, so a gap (unregistered day) breaks
+  // the line instead of interpolating over it. A run of exactly one point
+  // has no line to carry a color, so it gets a plain dot instead.
+  const runs = useMemo(() => {
+    const groups: RunPoint[][] = [];
+    let current: RunPoint[] = [];
     points.forEach((p, i) => {
       if (p.painLevel === null) {
-        if (current.length > 1) segments.push(current.join(" "));
+        if (current.length > 0) groups.push(current);
         current = [];
         return;
       }
-      current.push(`${current.length === 0 ? "M" : "L"} ${xAt(i, points.length)},${yAt(p.painLevel)}`);
+      current.push({ x: xAt(i, points.length), y: yAt(p.painLevel), level: p.painLevel });
     });
-    if (current.length > 1) segments.push(current.join(" "));
-    return segments.join(" ");
+    if (current.length > 0) groups.push(current);
+    return groups;
   }, [points]);
 
   const axisLabels = useMemo(() => buildAxisLabels(points), [points]);
@@ -150,6 +155,10 @@ export function PainChart({ points }: { points: PainPoint[] }) {
 
   const active = activeIndex !== null ? points[activeIndex] : null;
   const activeInfo = active && active.painLevel !== null ? painLevelInfo(active.painLevel) : null;
+  const activePoint =
+    activeIndex !== null && points[activeIndex].painLevel !== null
+      ? { x: xAt(activeIndex, points.length), y: yAt(points[activeIndex].painLevel), level: points[activeIndex].painLevel }
+      : null;
   const tooltipLeftPct =
     activeIndex !== null
       ? Math.min(Math.max((xAt(activeIndex, points.length) / VIEW_W) * 100, 8), 92)
@@ -215,31 +224,61 @@ export function PainChart({ points }: { points: PainPoint[] }) {
           />
         )}
 
-        <path
-          d={linePath}
-          fill="none"
-          className="stroke-neutral-500"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-
-        {points.map((p, i) => {
-          if (p.painLevel === null) return null;
-          const info = painLevelInfo(p.painLevel);
-          return (
+        {runs.map((run, ri) =>
+          run.length === 1 ? (
             <circle
-              key={p.date}
-              cx={xAt(i, points.length)}
-              cy={yAt(p.painLevel)}
-              r={activeIndex === i ? 6 : 5}
-              className={info.textClass}
+              key={`solo-${ri}`}
+              cx={run[0].x}
+              cy={run[0].y}
+              r={2.5}
+              className={painLevelInfo(run[0].level).textClass}
               fill="currentColor"
               stroke="var(--background)"
-              strokeWidth={2}
+              strokeWidth={1.25}
             />
-          );
-        })}
+          ) : (
+            smoothSegments(run).map((seg, si) => {
+              const id = `${gradientId}-${ri}-${si}`;
+              const fromInfo = painLevelInfo(run[si].level);
+              const toInfo = painLevelInfo(run[si + 1].level);
+              return (
+                <g key={id}>
+                  <linearGradient
+                    id={id}
+                    gradientUnits="userSpaceOnUse"
+                    x1={seg.x1}
+                    y1={seg.y1}
+                    x2={seg.x2}
+                    y2={seg.y2}
+                  >
+                    <stop offset="0%" stopColor="currentColor" className={fromInfo.textClass} />
+                    <stop offset="100%" stopColor="currentColor" className={toInfo.textClass} />
+                  </linearGradient>
+                  <path
+                    d={seg.d}
+                    fill="none"
+                    stroke={`url(#${id})`}
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </g>
+              );
+            })
+          ),
+        )}
+
+        {activePoint && (
+          <circle
+            cx={activePoint.x}
+            cy={activePoint.y}
+            r={3.5}
+            className={painLevelInfo(activePoint.level).textClass}
+            fill="currentColor"
+            stroke="var(--background)"
+            strokeWidth={1.25}
+          />
+        )}
 
         {axisLabels.map(({ index, primary, secondary }) => (
           <g key={`label-${points[index].date}`}>
