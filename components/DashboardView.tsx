@@ -21,7 +21,7 @@ const MAX_CUSTOM_DAYS = 366;
 
 export function DashboardView() {
   const { getEntry } = useEntries();
-  const [preset, setPreset] = useState<Preset>("week");
+  const [preset, setPreset] = useState<Preset>("month");
 
   const [customStart, setCustomStart] = useState(() => [...lastNDays(7)].at(-1)!);
   const [customEnd, setCustomEnd] = useState(() => todayISO());
