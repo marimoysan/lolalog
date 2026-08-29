@@ -96,3 +96,10 @@ export function firstOfMonth(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
   return toLocalISODate(new Date(d.getFullYear(), d.getMonth(), 1));
 }
+
+// Whole days from `a` to `b` (positive if b is later). Both parsed as local
+// midnight, so this is safe across DST transitions.
+export function daysBetween(a: string, b: string): number {
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.round((new Date(`${b}T00:00:00`).getTime() - new Date(`${a}T00:00:00`).getTime()) / msPerDay);
+}

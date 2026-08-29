@@ -17,6 +17,9 @@ import type { DailyEntry } from "@/lib/types";
 
 type EntriesContextValue = {
   getEntry: (date: string) => DailyEntry | undefined;
+  // All entries regardless of date range — used e.g. to find period starts
+  // from anywhere in history, not just the Dashboard's visible window.
+  listEntries: () => DailyEntry[];
   saveEntry: (entry: DailyEntry) => void;
   deleteEntry: (date: string) => void;
 };
@@ -69,6 +72,10 @@ export function EntriesProvider({ children }: { children: ReactNode }) {
     return entries[date];
   }
 
+  function listEntries() {
+    return Object.values(entries);
+  }
+
   function saveEntry(entry: DailyEntry) {
     setEntries((prev) => ({ ...prev, [entry.date]: entry }));
     (async () => {
@@ -96,7 +103,7 @@ export function EntriesProvider({ children }: { children: ReactNode }) {
   if (!ready) return null;
 
   return (
-    <EntriesContext.Provider value={{ getEntry, saveEntry, deleteEntry }}>
+    <EntriesContext.Provider value={{ getEntry, listEntries, saveEntry, deleteEntry }}>
       {children}
     </EntriesContext.Provider>
   );

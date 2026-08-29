@@ -10,6 +10,7 @@ import { useEntries } from "@/lib/db/entries-store";
 import { datesInRange, lastNDays, todayISO } from "@/lib/date";
 import { averagePainLevel, groupByMonth, groupByWeek, type CountPoint, type Granularity } from "@/lib/aggregate";
 import { hasIntenseActivity } from "@/lib/day-badges";
+import { cycleDayOf, isFertileWindow, isOvulationDay, periodStartDates } from "@/lib/cycle";
 import type { EventKey } from "@/lib/event-icons";
 
 type Preset = "week" | "month" | "custom";
@@ -25,7 +26,7 @@ const PRESETS: { value: Preset; label: string }[] = [
 const MAX_CUSTOM_DAYS = 366;
 
 export function DashboardView() {
-  const { getEntry } = useEntries();
+  const { getEntry, listEntries } = useEntries();
   const [preset, setPreset] = useState<Preset>("month");
   const [granularity, setGranularity] = useState<Granularity>("day");
   const [visibleSeries, setVisibleSeries] = useState<Set<EventKey>>(new Set());
@@ -58,6 +59,9 @@ export function DashboardView() {
     if (granularity === "day") {
       const points = dates.map((date) => ({ date, painLevel: getEntry(date)?.painLevel ?? null }));
       const periodFlags = dates.map((date) => getEntry(date)?.period ?? false);
+      const periodStarts = periodStartDates(listEntries());
+      const fertileFlags = dates.map((date) => isFertileWindow(cycleDayOf(date, periodStarts)));
+      const ovulationFlags = dates.map((date) => isOvulationDay(cycleDayOf(date, periodStarts)));
       const dayEvents = dates.map((date) => {
         const entry = getEntry(date);
         return {
@@ -66,7 +70,7 @@ export function DashboardView() {
           alcohol: entry?.alcohol ?? false,
         };
       });
-      return { points, periodFlags, dayEvents, bucketCounts: undefined };
+      return { points, periodFlags, fertileFlags, ovulationFlags, dayEvents, bucketCounts: undefined };
     }
 
     const buckets = granularity === "week" ? groupByWeek(dates) : groupByMonth(dates);
@@ -91,8 +95,15 @@ export function DashboardView() {
         count: bucketDates.filter((d) => getEntry(d)?.alcohol).length,
       })),
     };
-    return { points, periodFlags: undefined, dayEvents: undefined, bucketCounts };
-  }, [dates, granularity, getEntry]);
+    return {
+      points,
+      periodFlags: undefined,
+      fertileFlags: undefined,
+      ovulationFlags: undefined,
+      dayEvents: undefined,
+      bucketCounts,
+    };
+  }, [dates, granularity, getEntry, listEntries]);
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -148,6 +159,8 @@ export function DashboardView() {
           points={chartData.points}
           granularity={granularity}
           periodFlags={chartData.periodFlags}
+          fertileFlags={chartData.fertileFlags}
+          ovulationFlags={chartData.ovulationFlags}
           dayEvents={chartData.dayEvents}
           bucketCounts={chartData.bucketCounts}
           visibleSeries={visibleSeries}

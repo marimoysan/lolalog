@@ -3,7 +3,7 @@
 import { useId, useMemo, useRef, useState, type PointerEvent } from "react";
 import { painLevelInfo } from "@/lib/pain-scale";
 import { buildAxisLabels, toLocalDate, tooltipDateLabel } from "@/lib/chart-axis";
-import { EVENT_META, PERIOD_SHADE_CLASS, type EventKey } from "@/lib/event-icons";
+import { EVENT_META, FERTILE_SHADE_CLASS, OVULATION_META, PERIOD_SHADE_CLASS, type EventKey } from "@/lib/event-icons";
 import { smoothSegments } from "@/lib/chart-path";
 import type { CountPoint, Granularity } from "@/lib/aggregate";
 import type { PainLevel } from "@/lib/types";
@@ -38,6 +38,11 @@ const OVERLAY_MAX_HEIGHT_RATIO = 0.4;
 const OVERLAY_GROUP_WIDTH_RATIO = 0.35; // fraction of the column width used by the group of bars
 const OVERLAY_BAR_GAP = 2;
 
+// Ovulation marker sits in the top margin (above PAD_TOP), never over the
+// plotted line itself, regardless of that day's pain level.
+const OVULATION_ICON_SIZE = 14;
+const OVULATION_ICON_Y = 10;
+
 function isWeekend(date: string): boolean {
   const day = toLocalDate(date).getDay();
   return day === 0 || day === 6;
@@ -71,6 +76,8 @@ export function PainChart({
   points,
   granularity = "day",
   periodFlags,
+  fertileFlags,
+  ovulationFlags,
   dayEvents,
   bucketCounts,
   visibleSeries = new Set(),
@@ -83,6 +90,11 @@ export function PainChart({
   // a week/month bucket, a handful of period days reads as a misleadingly
   // solid block, so weekly/monthly views drop the shading entirely.
   periodFlags?: boolean[];
+  // Same as periodFlags, but for the fertile window / ovulation day of a
+  // projected 26-day cycle (see lib/cycle.ts) — also day-only, also always
+  // on regardless of visibleSeries.
+  fertileFlags?: boolean[];
+  ovulationFlags?: boolean[];
   // Parallel to `points`: only read for granularity === "day".
   dayEvents?: DayEvents[];
   // Parallel to `points`: only read for granularity !== "day" — per-bucket
@@ -206,6 +218,22 @@ export function PainChart({
                 width={halfWidth * 2}
                 height={yAt(0) - PAD_TOP}
                 className={PERIOD_SHADE_CLASS}
+              />
+            );
+          })}
+
+        {granularity === "day" &&
+          fertileFlags &&
+          points.map((p, i) => {
+            if (!fertileFlags[i]) return null;
+            return (
+              <rect
+                key={`fertile-${p.date}`}
+                x={xAt(i, points.length) - halfWidth}
+                y={PAD_TOP}
+                width={halfWidth * 2}
+                height={yAt(0) - PAD_TOP}
+                className={FERTILE_SHADE_CLASS}
               />
             );
           })}
@@ -378,6 +406,24 @@ export function PainChart({
                   );
                 })}
               </g>
+            );
+          })}
+
+        {granularity === "day" &&
+          ovulationFlags &&
+          points.map((p, i) => {
+            if (!ovulationFlags[i]) return null;
+            const x = xAt(i, points.length);
+            return (
+              <OVULATION_META.Icon
+                key={`ovulation-${p.date}`}
+                x={x - OVULATION_ICON_SIZE / 2}
+                y={OVULATION_ICON_Y - OVULATION_ICON_SIZE / 2}
+                width={OVULATION_ICON_SIZE}
+                height={OVULATION_ICON_SIZE}
+                strokeWidth={1.75}
+                className={OVULATION_META.textClass}
+              />
             );
           })}
       </svg>
