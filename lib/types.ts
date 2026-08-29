@@ -51,6 +51,9 @@ export type PainEpisode = {
   note: string;
 };
 
+export const MEDICATIONS = ["Ibuprofeno", "Paracetamol", "Metamizol", "Buscapina"] as const;
+export type Medication = (typeof MEDICATIONS)[number];
+
 export type FoodQuantity = "poco" | "normal" | "mucho";
 export type FoodQuality = "unhealthy" | "medium" | "healthy";
 
@@ -91,11 +94,17 @@ export type DailyEntry = {
   painLevel: PainLevel | null;
   painEpisodes: PainEpisode[];
   activityLevel: ScaleLevel | null;
-  lieDownNeed: ScaleLevel | null;
+  tiredness: ScaleLevel | null;
+  mood: ScaleLevel | null;
   sports: SportEntry[];
   period: boolean;
   sex: boolean;
   alcohol: boolean;
+  medication: Medication | null;
+  // Free text on how the medication worked. Only meaningful while
+  // medication is set, but not cleared elsewhere — see toggleMedication in
+  // LogForm, which clears it itself when the medication is deselected.
+  medicationEffect: string;
   food: FoodLog;
   notes: string;
 };
@@ -116,6 +125,10 @@ export function normalizeEntry(entry: DailyEntry): DailyEntry {
       locations: ep.locations ?? [],
       note: ep.note ?? "",
     })),
+    tiredness: entry.tiredness ?? null,
+    mood: entry.mood ?? null,
+    medication: entry.medication ?? null,
+    medicationEffect: entry.medicationEffect ?? "",
   };
 }
 
@@ -129,11 +142,14 @@ export function emptyEntry(date: string): DailyEntry {
     painLevel: null,
     painEpisodes: [],
     activityLevel: null,
-    lieDownNeed: null,
+    tiredness: null,
+    mood: null,
     sports: [],
     period: false,
     sex: false,
     alcohol: false,
+    medication: null,
+    medicationEffect: "",
     food: emptyFoodLog(),
     notes: "",
   };

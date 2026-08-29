@@ -6,7 +6,7 @@ export default function SyncPage() {
       <div className="flex flex-col gap-1">
         <h1 className="text-lg font-medium">Sincronización</h1>
         <p className="text-sm text-neutral-500">
-          Cifrado de extremo a extremo — el servidor nunca ve tus datos en claro.
+          Cifrado de extremo a extremo. El servidor nunca ve tus datos en claro.
         </p>
       </div>
       <SyncSetupForm />

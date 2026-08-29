@@ -152,12 +152,21 @@ retrospectiva sin acordarte del dolor de ese día es válido):
   se puede colapsar a una fila-resumen (trigger · ubicación · síntomas, +
   icono si tiene nota) para que un día con varios no sea una pared de forms
   abiertos.
-- `activityLevel`, `lieDownNeed`: escalas genéricas 1-5
+- `activityLevel`, `tiredness`, `mood`: escalas genéricas 1-5. `mood` se
+  muestra con caras (`MoodScale.tsx`/`lib/mood-scale.ts`, mismo patrón que
+  `PainScale`/`pain-scale.ts` pero con la escala invertida: 1 = Muy mal
+  (rojo) → 5 = Muy bien (verde), frente a dolor donde 1 = leve).
 - `sports: SportEntry[]` — lista libre (añadir/quitar), cada uno con tipo
   (`SPORT_TYPES`) + intensidad 1-5
 - `period`, `sex`, `alcohol`: booleanos (Sí/No) — `alcohol` vivió dentro de
   `food.tags` originalmente; se sacó a campo independiente para poder
   trackearlo aparte de qué se comió.
+- `medication: Medication | null` + `medicationEffect: string` —
+  single-select entre `MEDICATIONS` (Ibuprofeno/Paracetamol/Metamizol/
+  Buscapina) reutilizando `TagCloud` (pensado para multiselect) con
+  selección de uno solo y deselección al volver a tocar el chip activo
+  (`toggleMedication` en `LogForm.tsx`); al seleccionar aparece un textarea
+  libre "Efecto", que se limpia si se deselecciona la medicación.
 - `food: { quantity, quality, tags[] }` — cantidad y calidad de 3 opciones,
   tags multiselect (`FOOD_TAGS`; `FOOD_TAG_HINTS` mapea algún tag, de
   momento solo "Gluten", a un texto explicativo — `TagCloud` lo muestra como
@@ -166,9 +175,10 @@ retrospectiva sin acordarte del dolor de ese día es válido):
 - `notes: string` — notas libres al final del registro, para lo que no
   encaje en ningún otro campo
 
-La columna SQLite `pain_locations` (ubicación a nivel de día, versión previa
-a moverla dentro de `painEpisodes`) sigue en el schema pero ya no se lee ni
-se escribe — ver comentario en `initDailyLogSchema`.
+Las columnas SQLite `pain_locations` (ubicación a nivel de día, versión
+previa a moverla dentro de `painEpisodes`) y `lie_down_need` ("necesidad de
+tumbarme", descartado por no ser relevante) siguen en el schema pero ya no
+se leen ni se escriben — ver comentarios en `initDailyLogSchema`.
 
 Los arrays/objetos anidados dentro de `DailyEntry` (como `PainEpisode`) no
 tienen migración de columna SQL propia — viven serializados como JSON dentro
@@ -192,12 +202,15 @@ ahí, no en cada sitio donde se lee el campo) la próxima vez que se amplíe
   compartido también por el botón "Sin dolor" y por `HistoryList` — si se
   cambia un color/icono, cambiarlo ahí, no en cada componente.
 - [ScaleInput.tsx](components/ScaleInput.tsx): escala genérica 1-5 en
-  píldoras numeradas, para todo lo que NO sea dolor (actividad, necesidad de
-  tumbarme, intensidad de deporte). Deliberadamente distinta visualmente de
+  píldoras numeradas, para todo lo que NO sea dolor ni ánimo (actividad,
+  cansancio, intensidad de deporte). Deliberadamente distinta visualmente de
   `PainScale`. Prop opcional `allowNull` añade una píldora "NA" que llama a
   `onChange(null)`, para permitir borrar/marcar como no aplicable un campo ya
-  respondido — de momento solo activada en "Necesidad de tumbarme"; actividad
-  e intensidad de deporte no la usan.
+  respondido — de momento sin ningún campo activándola (queda disponible
+  para el próximo campo 1-5 que la necesite).
+- [MoodScale.tsx](components/MoodScale.tsx): caras 1-5 para "Ánimo", mismo
+  patrón que `PainScale.tsx` (ver arriba, colores por `lib/mood-scale.ts`)
+  pero con la escala invertida.
 - [ChoiceGroup.tsx](components/ChoiceGroup.tsx): single-select genérico de N
   opciones string (Sí/No, cantidad, calidad de comida).
 - [TagCloud.tsx](components/TagCloud.tsx): multiselect genérico de chips

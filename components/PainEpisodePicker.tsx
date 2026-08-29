@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, ChevronDown, StickyNote, X, Plus } from "lucide-react";
+import { Check, ChevronDown, StickyNote, Trash2, Plus } from "lucide-react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { TagCloud } from "@/components/TagCloud";
 import { PAIN_EPISODE_SYMPTOMS, PAIN_EPISODE_TRIGGERS, PAIN_LOCATIONS } from "@/lib/types";
@@ -134,7 +134,7 @@ export function PainEpisodePicker({
                   aria-label="Quitar episodio"
                   className="p-1 text-neutral-500"
                 >
-                  <X size={18} />
+                  <Trash2 size={18} />
                 </button>
               </div>
             </div>

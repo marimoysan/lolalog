@@ -8,12 +8,13 @@ import { useEntries } from "@/lib/db/entries-store";
 import { DateHeader } from "@/components/DateHeader";
 import { PainScale } from "@/components/PainScale";
 import { ScaleInput } from "@/components/ScaleInput";
+import { MoodScale } from "@/components/MoodScale";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
 import { TagCloud } from "@/components/TagCloud";
 import { SportPicker } from "@/components/SportPicker";
 import { PainEpisodePicker } from "@/components/PainEpisodePicker";
 import { NO_PAIN } from "@/lib/pain-scale";
-import { FOOD_TAGS, FOOD_TAG_HINTS } from "@/lib/types";
+import { FOOD_TAGS, FOOD_TAG_HINTS, MEDICATIONS } from "@/lib/types";
 import type {
   PainLevel,
   ScaleLevel,
@@ -21,6 +22,7 @@ import type {
   PainEpisode,
   FoodQuantity,
   FoodQuality,
+  Medication,
 } from "@/lib/types";
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -51,9 +53,10 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
   const [activityLevel, setActivityLevel] = useState<ScaleLevel | null>(
     existing?.activityLevel ?? null,
   );
-  const [lieDownNeed, setLieDownNeed] = useState<ScaleLevel | null>(
-    existing?.lieDownNeed ?? null,
+  const [tiredness, setTiredness] = useState<ScaleLevel | null>(
+    existing?.tiredness ?? null,
   );
+  const [mood, setMood] = useState<ScaleLevel | null>(existing?.mood ?? null);
   const [sports, setSports] = useState<SportEntry[]>(existing?.sports ?? []);
   const [period, setPeriod] = useState<"si" | "no" | null>(
     existing ? (existing.period ? "si" : "no") : null,
@@ -63,6 +66,12 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
   );
   const [alcohol, setAlcohol] = useState<"si" | "no" | null>(
     existing ? (existing.alcohol ? "si" : "no") : null,
+  );
+  const [medication, setMedication] = useState<Medication | null>(
+    existing?.medication ?? null,
+  );
+  const [medicationEffect, setMedicationEffect] = useState(
+    existing?.medicationEffect ?? "",
   );
   const [foodQuantity, setFoodQuantity] = useState<FoodQuantity | null>(
     existing?.food.quantity ?? null,
@@ -87,11 +96,14 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
     painLevel !== null ||
     painEpisodes.length > 0 ||
     activityLevel !== null ||
-    lieDownNeed !== null ||
+    tiredness !== null ||
+    mood !== null ||
     sports.length > 0 ||
     period !== null ||
     sex !== null ||
     alcohol !== null ||
+    medication !== null ||
+    medicationEffect.trim() !== "" ||
     foodQuantity !== null ||
     foodQuality !== null ||
     foodTags.length > 0 ||
@@ -103,11 +115,14 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
       painLevel,
       painEpisodes,
       activityLevel,
-      lieDownNeed,
+      tiredness,
+      mood,
       sports,
       period: period === "si",
       sex: sex === "si",
       alcohol: alcohol === "si",
+      medication,
+      medicationEffect,
       food: { quantity: foodQuantity, quality: foodQuality, tags: foodTags },
       notes,
     };
@@ -166,11 +181,14 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
     painLevel,
     painEpisodes,
     activityLevel,
-    lieDownNeed,
+    tiredness,
+    mood,
     sports,
     period,
     sex,
     alcohol,
+    medication,
+    medicationEffect,
     foodQuantity,
     foodQuality,
     foodTags,
@@ -181,11 +199,14 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
     setPainLevel(null);
     setPainEpisodes([]);
     setActivityLevel(null);
-    setLieDownNeed(null);
+    setTiredness(null);
+    setMood(null);
     setSports([]);
     setPeriod(null);
     setSex(null);
     setAlcohol(null);
+    setMedication(null);
+    setMedicationEffect("");
     setFoodQuantity(null);
     setFoodQuality(null);
     setFoodTags([]);
@@ -196,6 +217,17 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
     setFoodTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
     );
+  }
+
+  // Reuses TagCloud (a multiselect) as a single-select-with-deselect: only
+  // one medication at a time, tapping the active one clears it. Effect text
+  // only means anything while a medication is set, so it's cleared with it.
+  function toggleMedication(name: string) {
+    setMedication((prev) => {
+      const next = prev === name ? null : (name as Medication);
+      if (next === null) setMedicationEffect("");
+      return next;
+    });
   }
 
   return (
@@ -243,6 +275,19 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
         <PainEpisodePicker value={painEpisodes} onChange={setPainEpisodes} />
       </Field>
 
+      <Field label="Medicación">
+        <TagCloud tags={MEDICATIONS} selected={medication ? [medication] : []} onToggle={toggleMedication} />
+        {medication && (
+          <textarea
+            value={medicationEffect}
+            onChange={(e) => setMedicationEffect(e.target.value)}
+            placeholder="Efecto"
+            rows={2}
+            className="resize-none rounded-xl border border-neutral-700 bg-transparent p-3 text-sm placeholder:text-neutral-600"
+          />
+        )}
+      </Field>
+
       <hr className="my-4 border-neutral-800" />
       <h2 className="text-lg font-medium">Actividad diaria</h2>
 
@@ -254,13 +299,12 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
         />
       </Field>
 
-      <Field label="Necesidad de tumbarme">
-        <ScaleInput
-          value={lieDownNeed}
-          onChange={setLieDownNeed}
-          ariaLabelPrefix="Necesidad de tumbarme"
-          allowNull
-        />
+      <Field label="Cansancio">
+        <ScaleInput value={tiredness} onChange={setTiredness} ariaLabelPrefix="Cansancio" />
+      </Field>
+
+      <Field label="Ánimo">
+        <MoodScale value={mood} onChange={setMood} />
       </Field>
 
       <Field label="Deporte">
@@ -275,7 +319,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
         <ChoiceGroup options={[...YES_NO]} value={sex} onChange={setSex} />
       </Field>
 
-      <Field label="Comida — cantidad">
+      <Field label="Comida: cantidad">
         <ChoiceGroup<FoodQuantity>
           options={[
             { value: "poco", label: "Poco" },
@@ -287,7 +331,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
         />
       </Field>
 
-      <Field label="Comida — calidad">
+      <Field label="Comida: calidad">
         <ChoiceGroup<FoodQuality>
           options={[
             { value: "unhealthy", label: "Poco saludable" },
@@ -299,7 +343,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
         />
       </Field>
 
-      <Field label="Comida — qué comiste">
+      <Field label="Comida: qué comiste">
         <TagCloud
           tags={FOOD_TAGS}
           selected={foodTags}

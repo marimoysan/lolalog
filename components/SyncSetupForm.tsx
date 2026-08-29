@@ -52,8 +52,8 @@ export function SyncSetupForm() {
       setStatus("ok");
       setMessage(
         result.appliedCount > 0
-          ? `Sincronizado — ${result.appliedCount} día(s) traído(s) de otros dispositivos.`
-          : "Sincronizado — todo al día.",
+          ? `Sincronizado: ${result.appliedCount} día(s) traído(s) de otros dispositivos.`
+          : "Sincronizado: todo al día.",
       );
       setAlreadyConfigured(true);
     } else {
@@ -94,7 +94,7 @@ export function SyncSetupForm() {
         </div>
         <p className="text-xs text-neutral-500">
           La misma en todos tus dispositivos. Guárdala ahora en tu gestor de
-          contraseñas — la app no podrá volver a mostrártela después de esta pantalla.
+          contraseñas. La app no podrá volver a mostrártela después de esta pantalla.
         </p>
       </div>
 
@@ -120,7 +120,7 @@ export function SyncSetupForm() {
           </button>
         </div>
         <p className="text-xs text-neutral-500">
-          El valor de <code>SYNC_API_TOKEN</code> configurado en Vercel — el mismo en
+          El valor de <code>SYNC_API_TOKEN</code> configurado en Vercel, el mismo en
           todos tus dispositivos. Este sí puede volver a mostrarse aquí en cualquier
           momento.
         </p>
