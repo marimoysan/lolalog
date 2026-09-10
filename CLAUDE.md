@@ -64,10 +64,12 @@ tabla `daily_log` vía sql.js, y persisten en IndexedDB (sobreviven a recargar
 y cerrar el navegador). No hay seed de datos de ejemplo — cada dispositivo
 empieza con la tabla vacía y se llena vía uso normal + sync. El sync entre
 dispositivos (ver "Sync" arriba) está desplegado y configurado — probado de
-verdad entre móvil y desktop. El Dashboard tiene ya un primer MVP de
-gráficas reales (solo dolor por ahora, ver "Análisis y gráficas" y
-"Pantallas construidas" → Dashboard); el siguiente paso es sumar más
-métricas al mismo Dashboard (actividad, deporte, ciclo, comida...).
+verdad entre móvil y desktop. El Dashboard tiene ya gráficas reales de dolor
+con agregación diaria/semanal/mensual, capas de eventos (sexo, actividad
+intensa, alcohol) y ciclo menstrual (regla, ventana fértil, ovulación) —
+ver "Análisis y gráficas" y "Pantallas construidas" → Dashboard; el
+siguiente paso es sumar el resto de métricas al mismo gráfico (ánimo,
+cansancio, comida...).
 
 ### Pantallas construidas
 
@@ -124,7 +126,7 @@ métricas al mismo Dashboard (actividad, deporte, ciclo, comida...).
 - **Dashboard** ([components/DashboardView.tsx](components/DashboardView.tsx)
   — montado directamente por `SwipeNav` para el carrusel;
   `app/dashboard/page.tsx` es solo un wrapper fino para cuando se navega o
-  recarga directo a esa ruta): primer MVP — gráfica de dolor por día
+  recarga directo a esa ruta): gráfica de dolor
   ([components/PainChart.tsx](components/PainChart.tsx), SVG propio sin
   librería), tabs Última semana / Último mes / Custom (`ChoiceGroup`
   reutilizado; Último mes por defecto; Custom revela un mini-form con dos
@@ -134,14 +136,20 @@ métricas al mismo Dashboard (actividad, deporte, ciclo, comida...).
   petición explícita). Arrastrar sobre la gráfica (mouse o touch, vía
   Pointer Events) muestra un crosshair + tooltip con la fecha y el nivel (o
   "Sin registrar").
-  - **Eje X**: sombreado de fondo en columnas de sábado/domingo, gridline
-    vertical en cada tick etiquetado, más ticks que una gráfica genérica
-    (todos los días si hay ≤10 puntos, ~8 repartidos si hay más). Etiquetas
-    adaptativas: ≤10 puntos muestra letra del día de la semana (convención
-    española L M X J V S D, X para no chocar con martes) sobre el número de
-    día; con más puntos muestra el número de día solo, y el nombre completo
-    del mes (no abreviado) aparece una vez en el primer tick y en cada
-    cambio de mes.
+  - **Eje X**: sombreado de fondo en columnas de sábado/domingo (solo en
+    vista diaria), gridline vertical en cada tick etiquetado, más ticks que
+    una gráfica genérica (todos los días/semanas/meses si hay ≤10 puntos,
+    ~8 repartidos si hay más). Etiquetas adaptativas por granularidad
+    ([lib/chart-axis.ts](lib/chart-axis.ts), `buildAxisLabels` — factorizado
+    fuera de `PainChart` para poder reusarse si se añade otra gráfica con el
+    mismo eje): diario ≤10 puntos muestra letra del día de la semana
+    (convención española L M X J V S D, X para no chocar con martes) sobre
+    el número de día, >10 puntos muestra el número solo + nombre del mes en
+    el primer tick y en cada cambio de mes; semanal etiqueta el día de cada
+    lunes (sin letra de día, sería engañosa); mensual etiqueta el nombre
+    corto del mes + año en cada cambio de año. `tooltipDateLabel` (mismo
+    archivo) da el texto del tooltip por granularidad: fecha completa /
+    "Semana del X al Y" / "Mes Año".
   - **Línea**: color por gradiente en vez de puntos fijos — cada segmento
     entre dos días consecutivos es un `<linearGradient>` de SVG que va del
     color del nivel de dolor de un día al del siguiente (mismas clases de
@@ -153,6 +161,57 @@ métricas al mismo Dashboard (actividad, deporte, ciclo, comida...).
     punto fijo por día — solo un punto al hacer hover/arrastrar, y un punto
     suelto para un día registrado que quedó aislado entre dos huecos (sin
     vecino con el que formar un segmento que lleve el gradiente).
+  - **Agregación** ([components/DashboardGranularityPicker.tsx](components/DashboardGranularityPicker.tsx),
+    [lib/aggregate.ts](lib/aggregate.ts)): icono de calendario junto a
+    Filtros (ver debajo) que despliega un panel inline Diario/Semanal/Mensual
+    (por defecto Diario; elegir una opción cierra el panel, a diferencia de
+    Filtros que es multiselect y se mantiene abierto). En semana/mes,
+    `groupByWeek`/`groupByMonth` agrupan las fechas visibles en buckets
+    (semana = lunes de esa semana ISO, mes = día 1 de ese mes,
+    independientemente de si esa fecha cae dentro del rango visible) y el
+    nivel de dolor de cada bucket es la media de los días registrados
+    redondeada al entero más cercano (`averagePainLevel`; `null` solo si
+    ningún día del bucket tiene dato).
+  - **Eventos** (sexo/actividad intensa/alcohol —
+    [lib/event-icons.ts](lib/event-icons.ts) centraliza icono+color+label
+    por tipo, mismo patrón que `lib/pain-scale.ts`): botón "Filtros"
+    ([components/DashboardFilters.tsx](components/DashboardFilters.tsx),
+    icono de sliders) despliega un panel inline con un chip multiselect por
+    evento, todos apagados por defecto — "añadir cosas a la gráfica", no
+    mostradas de serie. "Actividad" reutiliza exactamente la misma señal que
+    el badge de rayo del Historial (`hasIntenseActivity` en
+    [lib/day-badges.ts](lib/day-badges.ts): deporte registrado O escala de
+    actividad al máximo) para que ambas pantallas lean el mismo criterio.
+    Representación distinta según granularidad — vista diaria: un carril
+    fino por evento activo, debajo de las etiquetas del eje, con el icono
+    marcado solo en los días donde ocurrió; vista semana/mes: en vez de
+    carriles, cada evento activo se dibuja como una barra fina translúcida
+    (opacity fija, no gated por nivel de dolor) dentro de la misma gráfica,
+    varias barras en paralelo con un hueco pequeño entre ellas y uno mayor
+    entre buckets (no en stack — se probó apilado/ancho completo y se
+    redujo explícitamente porque tapaba la línea de dolor), altura
+    limitada a una fracción del alto del plot para que nunca compita
+    visualmente con la línea.
+  - **Ciclo menstrual** ([lib/cycle.ts](lib/cycle.ts)): regla siempre visible
+    como sombreado de fondo (no está en Filtros, no es opt-in) — solo en
+    vista diaria, agregado a semana/mes se probó y se quitó porque un
+    puñado de días de regla dentro de un bucket se leía como un bloque
+    sólido engañoso. Ventana fértil y ovulación se calculan sobre un modelo
+    de ciclo fijo de 26 días proyectado desde el inicio de regla más
+    reciente (día 1 = primer día de un bloque de regla, no cada día del
+    bloque — `periodStartDates`; el cálculo depende solo de en qué día
+    *empieza* la regla, no de cuántos días dura), con `% 26` para seguir
+    proyectando ventanas futuras aunque la siguiente regla todavía no esté
+    registrada (`cycleDayOf`, null si no hay ninguna regla previa registrada
+    con la que anclar). Ventana fértil = días de ciclo 7–13 (sombreado
+    celeste, mismo mecanismo que la regla pero no togglable), ovulación =
+    día 12 (icono de huevo, `lib/event-icons.ts`, anclado en el margen
+    superior del gráfico para no quedar nunca tapado por la línea de dolor
+    sea cual sea su altura ese día). Para poder anclar el ciclo a una regla
+    anterior al rango visible en el Dashboard, `useEntries` expone
+    `listEntries()` ([lib/db/entries-store.tsx](lib/db/entries-store.tsx))
+    además del `getEntry(date)` puntual — necesario porque el ciclo puede
+    empezar fuera de la ventana que se está graficando.
 
 ### Esquema actual de `DailyEntry` ([lib/types.ts](lib/types.ts))
 
