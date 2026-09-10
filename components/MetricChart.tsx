@@ -9,7 +9,7 @@ import type { CountPoint, Granularity } from "@/lib/aggregate";
 
 export type MetricPoint = { date: string; value: number | null };
 export type DayEvents = { sex: boolean; activity: boolean; alcohol: boolean };
-type ValueInfo = { Icon: LucideIcon; label: string; textClass: string };
+export type ValueInfo = { Icon: LucideIcon; label: string; textClass: string };
 
 // A second series drawn as a flat, de-emphasized grey line on top of the
 // primary one — normalized to its own [min, max] rather than the primary
@@ -19,12 +19,16 @@ type ValueInfo = { Icon: LucideIcon; label: string; textClass: string };
 export type OverlaySeries = { key: string; points: MetricPoint[]; range: [number, number]; dashed?: boolean };
 
 const VIEW_W = 400;
-const VIEW_H = 220;
 const PAD_TOP = 20;
-const PAD_BOTTOM = 40;
+// Plot amplitude stays identical whether or not this instance shows axis
+// labels — only the bottom padding (reserved for label text) shrinks, so
+// stacked charts stay visually comparable while the ones without labels
+// reclaim the space (see `showAxisLabels`).
+const PLOT_H = 160;
+const PAD_BOTTOM_WITH_LABELS = 40;
+const PAD_BOTTOM_COMPACT = 14;
 const PAD_X = 12;
 const PLOT_W = VIEW_W - PAD_X * 2;
-const PLOT_H = VIEW_H - PAD_TOP - PAD_BOTTOM;
 
 // Extra rows below the axis labels, one per active event type — only shown
 // for daily granularity. Weekly/monthly aggregates show the same series as
@@ -96,6 +100,7 @@ export function MetricChart({
   overlays,
   activeIndex: controlledActiveIndex,
   onActiveIndexChange,
+  showAxisLabels = true,
 }: {
   points: MetricPoint[];
   // [min, max] of this series — pain is [0, 5], tiredness/mood are [1, 5].
@@ -131,6 +136,11 @@ export function MetricChart({
   // — falls back to its own local state when omitted.
   activeIndex?: number | null;
   onActiveIndexChange?: (index: number | null) => void;
+  // Text labels ("18", "L") under the ticks, on by default — turning it
+  // off reclaims that space on every chart but the bottom-most in a stack
+  // that shares one x-axis (see DashboardView); the vertical gridlines
+  // still render either way so the stack stays visually aligned.
+  showAxisLabels?: boolean;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const gradientId = useId();
@@ -138,6 +148,8 @@ export function MetricChart({
   const activeIndex = controlledActiveIndex !== undefined ? controlledActiveIndex : localActiveIndex;
   const setActiveIndex = onActiveIndexChange ?? setLocalActiveIndex;
   const [min, max] = range;
+  const padBottom = showAxisLabels ? PAD_BOTTOM_WITH_LABELS : PAD_BOTTOM_COMPACT;
+  const viewH = PAD_TOP + PLOT_H + padBottom;
 
   function yAt(value: number): number {
     return PAD_TOP + (1 - (value - min) / (max - min)) * PLOT_H;
@@ -189,7 +201,7 @@ export function MetricChart({
   const activeLaneKeys = granularity === "day" ? LANE_KEYS.filter((k) => visibleSeries.has(k)) : [];
   const activeOverlayKeys =
     granularity !== "day" ? LANE_KEYS.filter((k) => visibleSeries.has(k) && bucketCounts?.[k]) : [];
-  const totalHeight = VIEW_H + (activeLaneKeys.length > 0 ? activeLaneKeys.length * LANE_H + LANE_GAP : 0);
+  const totalHeight = viewH + (activeLaneKeys.length > 0 ? activeLaneKeys.length * LANE_H + LANE_GAP : 0);
 
   function updateActiveFromClientX(clientX: number) {
     const svg = svgRef.current;
@@ -201,6 +213,12 @@ export function MetricChart({
     setActiveIndex(Math.min(Math.max(idx, 0), points.length - 1));
   }
 
+  // A tap or drag pins the day — it stays active on release (no
+  // onPointerUp handler clearing it) so the crosshair/tooltip keep showing
+  // after lifting the finger, across all three Dashboard charts when this
+  // is in controlled mode. Only a genuinely aborted gesture (onPointerCancel)
+  // clears it here; tapping outside every chart to unpin is the parent's
+  // job (see DashboardView, which owns the shared `activeIndex`).
   function handlePointerDown(e: PointerEvent<SVGSVGElement>) {
     e.currentTarget.setPointerCapture(e.pointerId);
     updateActiveFromClientX(e.clientX);
@@ -245,9 +263,7 @@ export function MetricChart({
         aria-label={`${label} ${GRANULARITY_SUFFIX[granularity]}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
-        onPointerUp={clearActive}
         onPointerCancel={clearActive}
-        onPointerLeave={clearActive}
       >
         {granularity === "day" &&
           points.map((p, i) => {
@@ -440,33 +456,34 @@ export function MetricChart({
           />
         )}
 
-        {axisLabels.map(({ index, primary, secondary }) => (
-          <g key={`label-${points[index].date}`}>
-            {secondary && (
+        {showAxisLabels &&
+          axisLabels.map(({ index, primary, secondary }) => (
+            <g key={`label-${points[index].date}`}>
+              {secondary && (
+                <text
+                  x={xAt(index, points.length)}
+                  y={viewH - 20}
+                  textAnchor="middle"
+                  className="fill-neutral-500 text-[9px] font-medium"
+                >
+                  {secondary}
+                </text>
+              )}
               <text
                 x={xAt(index, points.length)}
-                y={VIEW_H - 20}
+                y={viewH - 6}
                 textAnchor="middle"
-                className="fill-neutral-500 text-[9px] font-medium"
+                className="fill-neutral-500 text-[10px]"
               >
-                {secondary}
+                {primary}
               </text>
-            )}
-            <text
-              x={xAt(index, points.length)}
-              y={VIEW_H - 6}
-              textAnchor="middle"
-              className="fill-neutral-500 text-[10px]"
-            >
-              {primary}
-            </text>
-          </g>
-        ))}
+            </g>
+          ))}
 
         {dayEvents &&
           activeLaneKeys.map((key, li) => {
             const meta = EVENT_META[key];
-            const laneY = VIEW_H + LANE_GAP + li * LANE_H + LANE_H / 2;
+            const laneY = viewH + LANE_GAP + li * LANE_H + LANE_H / 2;
             return (
               <g key={key}>
                 {points.map((p, i) => {

@@ -146,23 +146,63 @@ mismo Dashboard.
   Eje Y fijo a `range` sin números; días sin registrar quedan como hueco en
   la línea, no como el mínimo del rango (huecos cortan la línea — no se
   interpola por encima; probado lo contrario y revertido a petición
-  explícita). Arrastrar sobre cualquiera de las tres gráficas (mouse o
-  touch, vía Pointer Events) muestra un crosshair + tooltip con la fecha y
-  el valor (o "Sin registrar") — y ese mismo índice se refleja en las otras
-  dos, como si una única línea vertical atravesase las tres a la vez (cada
-  una con su propio tooltip para esa fecha). El índice activo vive en
-  `DashboardView` (`activeIndex`/`setActiveIndex`), no en cada gráfica —
-  `MetricChart` acepta `activeIndex`/`onActiveIndexChange` opcionales para
-  este caso (controlado) y cae a un `useState` propio si no se pasan
-  (usado en cualquier otro sitio donde se monte una sola gráfica suelta).
-  Funciona porque las tres comparten exactamente el mismo `dates`/buckets,
-  así que un mismo índice numérico apunta al mismo día en las tres; se
-  resetea a `null` en cuanto cambia el rango o la granularidad, para no
-  apuntar a un día que ya no está en el eje.
+  explícita).
+  - **Identidad de cada gráfica**: icono + nombre de texto (`MetricBadge`
+    en `DashboardView.tsx`) — Dolor usa `PAIN_BADGE`
+    ([lib/pain-scale.ts](lib/pain-scale.ts), icono de pulso cian, un icono
+    dedicado a "dolor como categoría" distinto de los iconos por nivel),
+    Cansancio/Ánimo reutilizan el mismo icono+color que ya llevan sus
+    botones de Superposición ([lib/overlay-metrics.ts](lib/overlay-metrics.ts))
+    — mismo glifo en dos sitios de la pantalla, no uno nuevo que aprender.
+    Se probó el icono solo, sin texto (`<h2>` `sr-only`, apoyándose en que
+    el tooltip ya nombra el valor al tocar) y se revirtió a petición
+    explícita: hace falta poder identificar cada gráfica sin tener que
+    interactuar primero.
+  - **Fijar un día**: tocar/arrastrar sobre cualquiera de las tres gráficas
+    (mouse o touch, vía Pointer Events) muestra un crosshair + tooltip con
+    la fecha y el valor (o "Sin registrar") — y ese mismo índice se refleja
+    en las otras dos, como si una única línea vertical atravesase las tres
+    a la vez (cada una con su propio tooltip para esa fecha; se probó
+    consolidar los tres tooltips en una única tarjeta de resumen debajo de
+    las gráficas y se revirtió a petición explícita — la burbuja pegada a
+    cada línea, justo donde se toca, se prefirió sobre eliminar la fecha
+    duplicada). El día queda **fijado** al soltar en vez de limpiarse
+    (`MetricChart` ya no tiene `onPointerUp`/`onPointerLeave` limpiando el
+    índice, solo `onPointerCancel` para un gesto realmente abortado) —
+    mismo patrón que apps de bolsa tipo Robinhood: se puede soltar y seguir
+    leyendo el valor fijado en las tres a la vez, en vez de tener que
+    mantener el dedo pulsado. Para soltarlo, tocar fuera de las tres
+    gráficas — `handleOutsideTap` en `DashboardView.tsx`, un `onClick` en
+    el contenedor del Dashboard que limpia `activeIndex` salvo que el tap
+    haya sido dentro de un `svg[role="img"]`. El índice activo vive en
+    `DashboardView` (`activeIndex`/`setActiveIndex`), no en cada gráfica —
+    `MetricChart` acepta `activeIndex`/`onActiveIndexChange` opcionales
+    para este caso (controlado) y cae a un `useState` propio si no se
+    pasan (usado en cualquier otro sitio donde se monte una sola gráfica
+    suelta, aunque ahí no hay ningún "tocar fuera para soltar" — eso es
+    responsabilidad de quien la controle). Funciona porque las tres
+    comparten exactamente el mismo `dates`/buckets, así que un mismo
+    índice numérico apunta al mismo día en las tres; se resetea a `null`
+    en cuanto cambia el rango o la granularidad (durante el render, no en
+    un efecto — comparando la referencia de `dates` y el valor de
+    `granularity` contra la última vista, el patrón de React para
+    "reajustar estado cuando cambia algo" sin el repintado extra de un
+    `useEffect`), para no dejar fijado un día que ya no está en el eje.
   - **Eje X**: sombreado de fondo en columnas de sábado/domingo (solo en
     vista diaria), gridline vertical en cada tick etiquetado, más ticks que
     una gráfica genérica (todos los días/semanas/meses si hay ≤10 puntos,
-    ~8 repartidos si hay más). Etiquetas adaptativas por granularidad
+    ~8 repartidos si hay más) — en las tres gráficas, para que seguir
+    alineado el ojo entre ellas no dependa de solo una. Las etiquetas de
+    texto bajo los ticks, en cambio, **no** se repiten: solo la última
+    gráfica (Ánimo) las muestra (`showAxisLabels` en `MetricChart`, por
+    defecto `true`, apagado en Dolor/Cansancio) — es el mismo eje X para
+    las tres, así que mostrarlo tres veces era la redundancia más clara de
+    las tres evaluadas. Apagar las etiquetas también libera altura: el
+    área del plot (`PLOT_H`, fija) es idéntica en las tres para que la
+    amplitud siga siendo comparable de un vistazo, pero el padding inferior
+    reservado para texto se reduce (`PAD_BOTTOM_COMPACT` vs
+    `PAD_BOTTOM_WITH_LABELS`) en las dos que no lo necesitan. Etiquetas
+    adaptativas por granularidad
     ([lib/chart-axis.ts](lib/chart-axis.ts), `buildAxisLabels` — factorizado
     fuera de la gráfica en sí precisamente para esto, reusarse entre Dolor/
     Cansancio/Ánimo con el mismo eje): diario ≤10 puntos muestra letra del día de la semana
@@ -203,12 +243,13 @@ mismo Dashboard.
   - **Eventos** (sexo/actividad intensa/alcohol —
     [lib/event-icons.ts](lib/event-icons.ts) centraliza icono+color+label
     por tipo, mismo patrón que `lib/pain-scale.ts`): tres botones
-    independientes solo-icono a la altura del título "Dolor", no del título
-    "Dashboard" (en `DashboardView.tsx`, sin componente propio ni panel
-    desplegable — se probó un botón "Filtros" que desplegaba un panel con
-    chips y se simplificó a esto) — deliberado: solo filtran la gráfica de
-    dolor, así que viven pegados a su título en vez de al nivel del
-    Dashboard entero, para que quede claro que no son globales. Todos
+    independientes solo-icono a la altura del badge de Dolor (ver
+    "Identidad de cada gráfica" arriba), no del título "Dashboard" (en
+    `DashboardView.tsx`, sin componente propio ni panel desplegable — se
+    probó un botón "Filtros" que desplegaba un panel con chips y se
+    simplificó a esto) — deliberado: solo filtran la gráfica de dolor, así
+    que viven pegados a ella en vez de al nivel del Dashboard entero, para
+    que quede claro que no son globales. Todos
     apagados por defecto — "añadir cosas a la
     gráfica", no mostradas de serie; cada botón alterna su
     evento (verde cuando está activo) y lleva `aria-label`/`aria-pressed`

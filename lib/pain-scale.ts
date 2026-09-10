@@ -1,4 +1,4 @@
-import { Laugh, Smile, Meh, Annoyed, Frown, Angry, type LucideIcon } from "lucide-react";
+import { Activity, Laugh, Smile, Meh, Annoyed, Frown, Angry, type LucideIcon } from "lucide-react";
 import type { PainLevel } from "@/lib/types";
 
 // Meh/Annoyed/Frown are near-identical glyphs at small sizes in lucide, so
@@ -28,3 +28,11 @@ export const NO_PAIN = {
 export function painLevelInfo(level: PainLevel) {
   return level === 0 ? NO_PAIN : PAIN_LEVELS.find((l) => l.level === level)!;
 }
+
+// Single icon representing "dolor" as a category, distinct from any one
+// severity level — used as the compact chart badge on the Dashboard (see
+// DashboardView) instead of a text title. Cyan on purpose: none of the
+// severity colors above (yellow→red) or the other Dashboard badges
+// (pink/sky/purple/amber/fuchsia) use it, so it doesn't accidentally read
+// as "this pain level" or clash with another metric's identity color.
+export const PAIN_BADGE = { Icon: Activity, textClass: "text-cyan-500" };

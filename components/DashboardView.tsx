@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, type MouseEvent as ReactMouseEvent } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
@@ -13,7 +13,7 @@ import { hasIntenseActivity } from "@/lib/day-badges";
 import { cycleDayOf, isFertileWindow, isOvulationDay, periodStartDates } from "@/lib/cycle";
 import { EVENT_META, EVENT_ORDER, type EventKey } from "@/lib/event-icons";
 import { OVERLAY_METRIC_META, OVERLAY_METRIC_ORDER, type OverlayMetricKey } from "@/lib/overlay-metrics";
-import { painLevelInfo } from "@/lib/pain-scale";
+import { painLevelInfo, PAIN_BADGE } from "@/lib/pain-scale";
 import { moodLevelInfo } from "@/lib/mood-scale";
 import { tirednessLevelInfo } from "@/lib/tiredness-scale";
 import type { PainLevel, ScaleLevel } from "@/lib/types";
@@ -70,6 +70,17 @@ function ToggleIconButton({
   );
 }
 
+// Icon + name above each chart — the icon alone (tried first) wasn't
+// enough on its own, added back the text label per feedback.
+function MetricBadge({ Icon, textClass, label }: { Icon: LucideIcon; textClass: string; label: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Icon size={16} strokeWidth={1.75} className={textClass} aria-hidden="true" />
+      <h2 className="text-sm text-neutral-500">{label}</h2>
+    </div>
+  );
+}
+
 export function DashboardView() {
   const { getEntry, listEntries } = useEntries();
   const [preset, setPreset] = useState<Preset>("month");
@@ -115,11 +126,15 @@ export function DashboardView() {
     return datesInRange(start, end).slice(0, MAX_CUSTOM_DAYS);
   }, [preset, appliedCustom]);
 
-  // Index no longer lines up (or no longer means "hovering") once the
-  // x-axis itself changes — different range or different bucketing.
-  useEffect(() => {
+  // Index no longer lines up (or no longer means anything pinned) once the
+  // x-axis itself changes — different range or different bucketing. Reset
+  // during render (React's "adjust state when a prop changes" pattern)
+  // rather than an effect, which would set state after an extra paint.
+  const [axisKey, setAxisKey] = useState({ dates, granularity });
+  if (axisKey.dates !== dates || axisKey.granularity !== granularity) {
+    setAxisKey({ dates, granularity });
     setActiveIndex(null);
-  }, [dates, granularity]);
+  }
 
   const chartData = useMemo(() => {
     if (granularity === "day") {
@@ -205,8 +220,20 @@ export function DashboardView() {
     }),
   );
 
+  // The three charts pin the tapped/dragged day on release instead of
+  // clearing it (see MetricChart) — tapping anywhere outside all three
+  // plots is what unpins it, handled here since this is where the shared
+  // `activeIndex` lives. Bubbles from the whole screen, but only acts when
+  // the tap didn't land on a chart's own <svg>, so dragging within a chart
+  // (which updates activeIndex on its own) is untouched.
+  function handleOutsideTap(e: ReactMouseEvent<HTMLDivElement>) {
+    if (activeIndex === null) return;
+    if ((e.target as HTMLElement).closest('svg[role="img"]')) return;
+    setActiveIndex(null);
+  }
+
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
+    <div className="flex flex-1 flex-col gap-6 p-6" onClick={handleOutsideTap}>
       <h1 className="text-lg font-medium">Dashboard</h1>
 
       <ChoiceGroup options={PRESETS} value={preset} onChange={setPreset} />
@@ -252,7 +279,7 @@ export function DashboardView() {
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm text-neutral-500">Dolor</h2>
+          <MetricBadge Icon={PAIN_BADGE.Icon} textClass={PAIN_BADGE.textClass} label="Dolor" />
           <div className="flex items-center gap-2">
             {EVENT_ORDER.map((key) => {
               const meta = EVENT_META[key];
@@ -298,11 +325,16 @@ export function DashboardView() {
           overlays={painOverlays}
           activeIndex={activeIndex}
           onActiveIndexChange={setActiveIndex}
+          showAxisLabels={false}
         />
       </div>
 
       <div className="flex flex-col gap-2">
-        <h2 className="text-sm text-neutral-500">Cansancio</h2>
+        <MetricBadge
+          Icon={OVERLAY_METRIC_META.tiredness.Icon}
+          textClass={OVERLAY_METRIC_META.tiredness.textClass}
+          label="Cansancio"
+        />
         <MetricChart
           points={chartData.tirednessPoints}
           range={SCALE_RANGE}
@@ -311,11 +343,16 @@ export function DashboardView() {
           granularity={granularity}
           activeIndex={activeIndex}
           onActiveIndexChange={setActiveIndex}
+          showAxisLabels={false}
         />
       </div>
 
       <div className="flex flex-col gap-2">
-        <h2 className="text-sm text-neutral-500">Ánimo</h2>
+        <MetricBadge
+          Icon={OVERLAY_METRIC_META.mood.Icon}
+          textClass={OVERLAY_METRIC_META.mood.textClass}
+          label="Ánimo"
+        />
         <MetricChart
           points={chartData.moodPoints}
           range={SCALE_RANGE}
