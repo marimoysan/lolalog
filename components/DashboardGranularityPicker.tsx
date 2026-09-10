@@ -11,8 +11,8 @@ const OPTIONS: { value: Granularity; label: string }[] = [
 ];
 
 // Icon button that reveals an inline panel to pick the chart's aggregation
-// — same "tap to reveal a panel below the trigger" pattern as
-// DashboardFilters, but single-select: picking an option closes the panel
+// — same "tap to reveal a panel below the trigger" pattern as the Custom
+// date-range form, but single-select: picking an option closes the panel
 // instead of staying open for further toggles.
 export function DashboardGranularityPicker({
   value,

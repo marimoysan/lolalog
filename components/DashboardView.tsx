@@ -2,16 +2,21 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import type { LucideIcon } from "lucide-react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
-import { DashboardFilters } from "@/components/DashboardFilters";
 import { DashboardGranularityPicker } from "@/components/DashboardGranularityPicker";
-import { PainChart } from "@/components/PainChart";
+import { MetricChart, type OverlaySeries } from "@/components/MetricChart";
 import { useEntries } from "@/lib/db/entries-store";
 import { datesInRange, lastNDays, todayISO } from "@/lib/date";
-import { averagePainLevel, groupByMonth, groupByWeek, type CountPoint, type Granularity } from "@/lib/aggregate";
+import { averageLevel, groupByMonth, groupByWeek, type CountPoint, type Granularity } from "@/lib/aggregate";
 import { hasIntenseActivity } from "@/lib/day-badges";
 import { cycleDayOf, isFertileWindow, isOvulationDay, periodStartDates } from "@/lib/cycle";
-import type { EventKey } from "@/lib/event-icons";
+import { EVENT_META, EVENT_ORDER, type EventKey } from "@/lib/event-icons";
+import { OVERLAY_METRIC_META, OVERLAY_METRIC_ORDER, type OverlayMetricKey } from "@/lib/overlay-metrics";
+import { painLevelInfo } from "@/lib/pain-scale";
+import { moodLevelInfo } from "@/lib/mood-scale";
+import { tirednessLevelInfo } from "@/lib/tiredness-scale";
+import type { PainLevel, ScaleLevel } from "@/lib/types";
 
 type Preset = "week" | "month" | "custom";
 
@@ -25,14 +30,64 @@ const PRESETS: { value: Preset; label: string }[] = [
 // thousands of points.
 const MAX_CUSTOM_DAYS = 366;
 
+// Tiredness/mood are both ScaleLevel (1-5), unlike pain's 0-5 — used both
+// for their own standalone charts and for their overlay on Dolor.
+const SCALE_RANGE: [number, number] = [1, 5];
+
+// MetricChart wants `(value: number) => ...`; the individual *-scale.ts
+// helpers are narrower (PainLevel/ScaleLevel) since that's all a *stored*
+// entry can be, but an averaged bucket is still an integer in that same
+// range, so the cast back is safe here.
+const painValueInfo = (value: number) => painLevelInfo(value as PainLevel);
+const moodValueInfo = (value: number) => moodLevelInfo(value as ScaleLevel);
+const tirednessValueInfo = (value: number) => tirednessLevelInfo(value as ScaleLevel);
+
+function ToggleIconButton({
+  Icon,
+  label,
+  textClass,
+  active,
+  onClick,
+}: {
+  Icon: LucideIcon;
+  label: string;
+  textClass: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      aria-pressed={active}
+      className={`flex items-center justify-center rounded-full border p-2 transition-colors ${
+        active ? "border-brand-green bg-brand-green text-white" : "border-neutral-700 text-neutral-400"
+      }`}
+    >
+      <Icon size={14} strokeWidth={1.75} className={active ? "" : textClass} />
+    </button>
+  );
+}
+
 export function DashboardView() {
   const { getEntry, listEntries } = useEntries();
   const [preset, setPreset] = useState<Preset>("month");
   const [granularity, setGranularity] = useState<Granularity>("day");
   const [visibleSeries, setVisibleSeries] = useState<Set<EventKey>>(new Set());
+  const [visibleOverlays, setVisibleOverlays] = useState<Set<OverlayMetricKey>>(new Set());
 
   function toggleSeries(key: EventKey) {
     setVisibleSeries((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleOverlay(key: OverlayMetricKey) {
+    setVisibleOverlays((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -57,7 +112,9 @@ export function DashboardView() {
 
   const chartData = useMemo(() => {
     if (granularity === "day") {
-      const points = dates.map((date) => ({ date, painLevel: getEntry(date)?.painLevel ?? null }));
+      const painPoints = dates.map((date) => ({ date, value: getEntry(date)?.painLevel ?? null }));
+      const tirednessPoints = dates.map((date) => ({ date, value: getEntry(date)?.tiredness ?? null }));
+      const moodPoints = dates.map((date) => ({ date, value: getEntry(date)?.mood ?? null }));
       const periodFlags = dates.map((date) => getEntry(date)?.period ?? false);
       const periodStarts = periodStartDates(listEntries());
       const fertileFlags = dates.map((date) => isFertileWindow(cycleDayOf(date, periodStarts)));
@@ -70,13 +127,30 @@ export function DashboardView() {
           alcohol: entry?.alcohol ?? false,
         };
       });
-      return { points, periodFlags, fertileFlags, ovulationFlags, dayEvents, bucketCounts: undefined };
+      return {
+        painPoints,
+        tirednessPoints,
+        moodPoints,
+        periodFlags,
+        fertileFlags,
+        ovulationFlags,
+        dayEvents,
+        bucketCounts: undefined,
+      };
     }
 
     const buckets = granularity === "week" ? groupByWeek(dates) : groupByMonth(dates);
-    const points = buckets.map(({ date, dates: bucketDates }) => ({
+    const painPoints = buckets.map(({ date, dates: bucketDates }) => ({
       date,
-      painLevel: averagePainLevel(bucketDates.map((d) => getEntry(d)?.painLevel ?? null)),
+      value: averageLevel(bucketDates.map((d) => getEntry(d)?.painLevel ?? null)),
+    }));
+    const tirednessPoints = buckets.map(({ date, dates: bucketDates }) => ({
+      date,
+      value: averageLevel(bucketDates.map((d) => getEntry(d)?.tiredness ?? null)),
+    }));
+    const moodPoints = buckets.map(({ date, dates: bucketDates }) => ({
+      date,
+      value: averageLevel(bucketDates.map((d) => getEntry(d)?.mood ?? null)),
     }));
     const bucketCounts: Record<EventKey, CountPoint[]> = {
       sex: buckets.map(({ date, dates: bucketDates }) => ({
@@ -96,7 +170,9 @@ export function DashboardView() {
       })),
     };
     return {
-      points,
+      painPoints,
+      tirednessPoints,
+      moodPoints,
       periodFlags: undefined,
       fertileFlags: undefined,
       ovulationFlags: undefined,
@@ -104,6 +180,19 @@ export function DashboardView() {
       bucketCounts,
     };
   }, [dates, granularity, getEntry, listEntries]);
+
+  const overlayPoints: Record<OverlayMetricKey, typeof chartData.tirednessPoints> = {
+    tiredness: chartData.tirednessPoints,
+    mood: chartData.moodPoints,
+  };
+  const painOverlays: OverlaySeries[] = OVERLAY_METRIC_ORDER.filter((key) => visibleOverlays.has(key)).map(
+    (key) => ({
+      key,
+      points: overlayPoints[key],
+      range: SCALE_RANGE,
+      dashed: OVERLAY_METRIC_META[key].dashed,
+    }),
+  );
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-6">
@@ -148,15 +237,46 @@ export function DashboardView() {
         </form>
       )}
 
-      <div className="flex gap-2">
-        <DashboardGranularityPicker value={granularity} onChange={setGranularity} />
-        <DashboardFilters visible={visibleSeries} onToggle={toggleSeries} />
-      </div>
+      <DashboardGranularityPicker value={granularity} onChange={setGranularity} />
 
       <div className="flex flex-col gap-2">
-        <h2 className="text-sm text-neutral-500">Dolor</h2>
-        <PainChart
-          points={chartData.points}
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm text-neutral-500">Dolor</h2>
+          <div className="flex items-center gap-2">
+            {EVENT_ORDER.map((key) => {
+              const meta = EVENT_META[key];
+              return (
+                <ToggleIconButton
+                  key={key}
+                  Icon={meta.Icon}
+                  label={meta.label}
+                  textClass={meta.textClass}
+                  active={visibleSeries.has(key)}
+                  onClick={() => toggleSeries(key)}
+                />
+              );
+            })}
+            <div className="mx-0.5 h-6 w-px bg-neutral-800" aria-hidden="true" />
+            {OVERLAY_METRIC_ORDER.map((key) => {
+              const meta = OVERLAY_METRIC_META[key];
+              return (
+                <ToggleIconButton
+                  key={key}
+                  Icon={meta.Icon}
+                  label={`Superponer ${meta.label.toLowerCase()}`}
+                  textClass={meta.textClass}
+                  active={visibleOverlays.has(key)}
+                  onClick={() => toggleOverlay(key)}
+                />
+              );
+            })}
+          </div>
+        </div>
+        <MetricChart
+          points={chartData.painPoints}
+          range={[0, 5]}
+          valueInfo={painValueInfo}
+          label="Nivel de dolor"
           granularity={granularity}
           periodFlags={chartData.periodFlags}
           fertileFlags={chartData.fertileFlags}
@@ -164,6 +284,29 @@ export function DashboardView() {
           dayEvents={chartData.dayEvents}
           bucketCounts={chartData.bucketCounts}
           visibleSeries={visibleSeries}
+          overlays={painOverlays}
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <h2 className="text-sm text-neutral-500">Cansancio</h2>
+        <MetricChart
+          points={chartData.tirednessPoints}
+          range={SCALE_RANGE}
+          valueInfo={tirednessValueInfo}
+          label="Cansancio"
+          granularity={granularity}
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <h2 className="text-sm text-neutral-500">Ánimo</h2>
+        <MetricChart
+          points={chartData.moodPoints}
+          range={SCALE_RANGE}
+          valueInfo={moodValueInfo}
+          label="Ánimo"
+          granularity={granularity}
         />
       </div>
 

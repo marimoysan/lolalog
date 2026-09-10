@@ -51,7 +51,7 @@ llamadas a servicios de terceros que reciban estos datos en claro.
   de la app, client-side (consultando el sql.js ya cargado en cada
   dispositivo), nunca server-side: el servidor de sync nunca ve datos en
   claro, así que cualquier cómputo de stats en servidor rompería esa
-  garantía. Primer MVP ya construido (solo dolor, ver "Pantallas
+  garantía. Ya construido (dolor, cansancio y ánimo, ver "Pantallas
   construidas" → Dashboard) como SVG propio, sin librería de charting — si
   en el futuro se añade una librería, que sea porque se pide explícitamente,
   no por defecto.
@@ -64,12 +64,13 @@ tabla `daily_log` vía sql.js, y persisten en IndexedDB (sobreviven a recargar
 y cerrar el navegador). No hay seed de datos de ejemplo — cada dispositivo
 empieza con la tabla vacía y se llena vía uso normal + sync. El sync entre
 dispositivos (ver "Sync" arriba) está desplegado y configurado — probado de
-verdad entre móvil y desktop. El Dashboard tiene ya gráficas reales de dolor
-con agregación diaria/semanal/mensual, capas de eventos (sexo, actividad
-intensa, alcohol) y ciclo menstrual (regla, ventana fértil, ovulación) —
-ver "Análisis y gráficas" y "Pantallas construidas" → Dashboard; el
-siguiente paso es sumar el resto de métricas al mismo gráfico (ánimo,
-cansancio, comida...).
+verdad entre móvil y desktop. El Dashboard tiene ya tres gráficas reales
+(Dolor, Cansancio, Ánimo) con agregación diaria/semanal/mensual, capas de
+eventos (sexo, actividad intensa, alcohol) y ciclo menstrual (regla,
+ventana fértil, ovulación) sobre Dolor, y una superposición opcional de
+Cansancio/Ánimo sobre esa misma gráfica — ver "Análisis y gráficas" y
+"Pantallas construidas" → Dashboard; el siguiente paso es sumar comida al
+mismo Dashboard.
 
 ### Pantallas construidas
 
@@ -80,6 +81,13 @@ cansancio, comida...).
   coral que se rellenan al marcar, auto-envío al completar los 4 dígitos,
   y parpadeo en rojo + limpieza automática si el PIN es incorrecto. También
   escucha teclado físico (dígitos/Backspace) para uso en desktop.
+- **Barra superior** ([components/TopBar.tsx](components/TopBar.tsx)): franja
+  fija arriba con el wordmark "LolaLog" (icono cuadrado + texto reproducido
+  como HTML con `text-foreground`/`text-brand-green-light`, no el SVG del
+  lockup — mismo patrón que describe "Identidad visual" debajo). Montada en
+  `PinGate.tsx` junto a `BottomNav`, así que es global a toda la app ya
+  desbloqueada (las tres pestañas del carrusel, Historial, `/sync`), no solo
+  al Dashboard/Log.
 - **Nav inferior** ([components/BottomNav.tsx](components/BottomNav.tsx)):
   Dashboard / Log (default, `/`) / Historial, con iconos de `lucide-react`.
 - **Swipe entre pestañas** ([components/SwipeNav.tsx](components/SwipeNav.tsx)):
@@ -126,23 +134,28 @@ cansancio, comida...).
 - **Dashboard** ([components/DashboardView.tsx](components/DashboardView.tsx)
   — montado directamente por `SwipeNav` para el carrusel;
   `app/dashboard/page.tsx` es solo un wrapper fino para cuando se navega o
-  recarga directo a esa ruta): gráfica de dolor
-  ([components/PainChart.tsx](components/PainChart.tsx), SVG propio sin
-  librería), tabs Última semana / Último mes / Custom (`ChoiceGroup`
-  reutilizado; Último mes por defecto; Custom revela un mini-form con dos
-  `<input type="date">` + "Aplicar"). Eje Y fijo 0–5 sin números; días sin
-  registrar quedan como hueco en la línea, no como 0 (huecos cortan la
-  línea — no se interpola por encima; probado lo contrario y revertido a
-  petición explícita). Arrastrar sobre la gráfica (mouse o touch, vía
-  Pointer Events) muestra un crosshair + tooltip con la fecha y el nivel (o
-  "Sin registrar").
+  recarga directo a esa ruta): tres gráficas apiladas — Dolor, Cansancio,
+  Ánimo (ver bullets propios debajo) — que comparten un único componente
+  genérico ([components/MetricChart.tsx](components/MetricChart.tsx), SVG
+  propio sin librería; se llamó `PainChart` hasta que dejó de ser solo de
+  dolor) parametrizado por `points`/`range`/`valueInfo`/`label`, más un
+  único selector de rango (tabs Última semana / Último mes / Custom,
+  `ChoiceGroup` reutilizado; Último mes por defecto; Custom revela un
+  mini-form con dos `<input type="date">` + "Aplicar") y una única
+  granularidad (ver "Agregación" debajo) que aplican a las tres a la vez.
+  Eje Y fijo a `range` sin números; días sin registrar quedan como hueco en
+  la línea, no como el mínimo del rango (huecos cortan la línea — no se
+  interpola por encima; probado lo contrario y revertido a petición
+  explícita). Arrastrar sobre cualquiera de las tres gráficas (mouse o
+  touch, vía Pointer Events) muestra un crosshair + tooltip con la fecha y
+  el valor (o "Sin registrar").
   - **Eje X**: sombreado de fondo en columnas de sábado/domingo (solo en
     vista diaria), gridline vertical en cada tick etiquetado, más ticks que
     una gráfica genérica (todos los días/semanas/meses si hay ≤10 puntos,
     ~8 repartidos si hay más). Etiquetas adaptativas por granularidad
     ([lib/chart-axis.ts](lib/chart-axis.ts), `buildAxisLabels` — factorizado
-    fuera de `PainChart` para poder reusarse si se añade otra gráfica con el
-    mismo eje): diario ≤10 puntos muestra letra del día de la semana
+    fuera de la gráfica en sí precisamente para esto, reusarse entre Dolor/
+    Cansancio/Ánimo con el mismo eje): diario ≤10 puntos muestra letra del día de la semana
     (convención española L M X J V S D, X para no chocar con martes) sobre
     el número de día, >10 puntos muestra el número solo + nombre del mes en
     el primer tick y en cada cambio de mes; semanal etiqueta el día de cada
@@ -151,34 +164,54 @@ cansancio, comida...).
     archivo) da el texto del tooltip por granularidad: fecha completa /
     "Semana del X al Y" / "Mes Año".
   - **Línea**: color por gradiente en vez de puntos fijos — cada segmento
-    entre dos días consecutivos es un `<linearGradient>` de SVG que va del
-    color del nivel de dolor de un día al del siguiente (mismas clases de
-    `lib/pain-scale.ts`, vía `stop-color: currentColor` — no hay hex
-    duplicado). La curva es Catmull-Rom → Bézier
+    entre dos puntos consecutivos es un `<linearGradient>` de SVG que va del
+    color de un punto al del siguiente, vía `stop-color: currentColor` —
+    no hay hex duplicado. El color/icono/label por valor lo da la prop
+    `valueInfo` (`painLevelInfo`/`moodLevelInfo`/`tirednessLevelInfo` según
+    la gráfica — ver "Cansancio y Ánimo" debajo), así que Cansancio y Ánimo
+    tienen exactamente esta misma línea con gradiente, solo cambia la
+    paleta. La curva es Catmull-Rom → Bézier
     ([lib/chart-path.ts](lib/chart-path.ts), `smoothLinePath`/
-    `smoothSegments`) en vez de segmentos rectos, pensada para reusarse tal
-    cual cuando se superpongan más series (mood, cansancio...). No hay
+    `smoothSegments`) en vez de segmentos rectos. No hay
     punto fijo por día — solo un punto al hacer hover/arrastrar, y un punto
     suelto para un día registrado que quedó aislado entre dos huecos (sin
     vecino con el que formar un segmento que lleve el gradiente).
   - **Agregación** ([components/DashboardGranularityPicker.tsx](components/DashboardGranularityPicker.tsx),
-    [lib/aggregate.ts](lib/aggregate.ts)): icono de calendario junto a
-    Filtros (ver debajo) que despliega un panel inline Diario/Semanal/Mensual
-    (por defecto Diario; elegir una opción cierra el panel, a diferencia de
-    Filtros que es multiselect y se mantiene abierto). En semana/mes,
+    [lib/aggregate.ts](lib/aggregate.ts)): icono de calendario, debajo de
+    los presets de rango, que despliega un panel inline Diario/Semanal/Mensual
+    (por defecto Diario; elegir una opción cierra el panel — a diferencia de
+    los botones de Eventos, ver debajo, que son toggles independientes sin
+    panel). Una sola granularidad para las tres gráficas (Dolor, Cansancio,
+    Ánimo). En semana/mes,
     `groupByWeek`/`groupByMonth` agrupan las fechas visibles en buckets
     (semana = lunes de esa semana ISO, mes = día 1 de ese mes,
     independientemente de si esa fecha cae dentro del rango visible) y el
-    nivel de dolor de cada bucket es la media de los días registrados
-    redondeada al entero más cercano (`averagePainLevel`; `null` solo si
-    ningún día del bucket tiene dato).
+    valor de cada bucket es la media de los días registrados de esa gráfica
+    redondeada al entero más cercano (`averageLevel`, genérica sobre
+    cualquiera de las tres escalas; `null` solo si ningún día del bucket
+    tiene dato).
   - **Eventos** (sexo/actividad intensa/alcohol —
     [lib/event-icons.ts](lib/event-icons.ts) centraliza icono+color+label
-    por tipo, mismo patrón que `lib/pain-scale.ts`): botón "Filtros"
-    ([components/DashboardFilters.tsx](components/DashboardFilters.tsx),
-    icono de sliders) despliega un panel inline con un chip multiselect por
-    evento, todos apagados por defecto — "añadir cosas a la gráfica", no
-    mostradas de serie. "Actividad" reutiliza exactamente la misma señal que
+    por tipo, mismo patrón que `lib/pain-scale.ts`): tres botones
+    independientes solo-icono a la altura del título "Dolor", no del título
+    "Dashboard" (en `DashboardView.tsx`, sin componente propio ni panel
+    desplegable — se probó un botón "Filtros" que desplegaba un panel con
+    chips y se simplificó a esto) — deliberado: solo filtran la gráfica de
+    dolor, así que viven pegados a su título en vez de al nivel del
+    Dashboard entero, para que quede claro que no son globales. Todos
+    apagados por defecto — "añadir cosas a la
+    gráfica", no mostradas de serie; cada botón alterna su
+    evento (verde cuando está activo) y lleva `aria-label`/`aria-pressed`
+    con el label de `lib/event-icons.ts` ya que no hay texto visible. En la
+    misma fila, tras un separador vertical fino, van dos botones más con el
+    mismo estilo para superponer Cansancio/Ánimo sobre Dolor — ver
+    "Superposición sobre Dolor" debajo; comparten el componente
+    `ToggleIconButton` interno de `DashboardView.tsx` pero controlan estado
+    distinto (`visibleSeries` vs `visibleOverlays`) porque son conceptos
+    distintos: eventos son booleanos con su propio render (carriles/barras),
+    superposición es una serie continua reutilizando el mismo render de
+    línea que la gráfica principal.
+    "Actividad" reutiliza exactamente la misma señal que
     el badge de rayo del Historial (`hasIntenseActivity` en
     [lib/day-badges.ts](lib/day-badges.ts): deporte registrado O escala de
     actividad al máximo) para que ambas pantallas lean el mismo criterio.
@@ -193,7 +226,8 @@ cansancio, comida...).
     limitada a una fracción del alto del plot para que nunca compita
     visualmente con la línea.
   - **Ciclo menstrual** ([lib/cycle.ts](lib/cycle.ts)): regla siempre visible
-    como sombreado de fondo (no está en Filtros, no es opt-in) — solo en
+    como sombreado de fondo (no es uno de los botones de Eventos, no es
+    opt-in) — solo en
     vista diaria, agregado a semana/mes se probó y se quitó porque un
     puñado de días de regla dentro de un bucket se leía como un bloque
     sólido engañoso. Ventana fértil y ovulación se calculan sobre un modelo
@@ -212,6 +246,43 @@ cansancio, comida...).
     `listEntries()` ([lib/db/entries-store.tsx](lib/db/entries-store.tsx))
     además del `getEntry(date)` puntual — necesario porque el ciclo puede
     empezar fuera de la ventana que se está graficando.
+  - **Cansancio y Ánimo**: dos gráficas más, debajo de Dolor, siempre
+    visibles (no dependen de ningún toggle) — mismo `MetricChart`, mismo
+    eje X, misma granularidad, pero `range={[1, 5]}` (no `[0, 5]` como
+    dolor) y sin ninguno de los extras de Dolor (sin sombreado de ciclo, sin
+    botones de Eventos propios — decisión explícita: menos superficie nueva
+    antes que triplicar esos controles; se puede añadir después si hace
+    falta). Ánimo usa
+    `moodLevelInfo` ([lib/mood-scale.ts](lib/mood-scale.ts)) para el
+    gradiente — igual que Dolor, cada nivel tiene su propio color, aquí
+    invertido (1 rojo → 5 verde). Cansancio usa
+    `tirednessLevelInfo` ([lib/tiredness-scale.ts](lib/tiredness-scale.ts)),
+    deliberadamente **plano** (mismo `textClass` en los 5 niveles, cambia
+    solo el label del tooltip) en vez de un gradiente de severidad — a
+    diferencia de dolor/ánimo, `ScaleInput` ya mantiene cansancio sin color
+    propio en el Log (ver "Sistema de inputs" debajo), así que la gráfica
+    sigue esa misma convención en lugar de inventar una paleta nueva solo
+    para esto.
+  - **Superposición sobre Dolor**: los dos botones extra de la fila de
+    Eventos (ver arriba) activan `visibleOverlays`
+    (`Set<"tiredness" | "mood">`, [lib/overlay-metrics.ts](lib/overlay-metrics.ts))
+    y dibujan Cansancio/Ánimo como una línea gris plana (sin gradiente,
+    `opacity` baja, `smoothLinePath` de un solo color en vez de
+    `smoothSegments` con gradiente por punto) por encima de la gráfica de
+    Dolor — prop `overlays` de `MetricChart`. Deliberadamente gris y no con
+    la paleta propia de cada métrica: el eje ya no tiene números (es
+    intencional, solo enseña forma/tendencia — ver arriba), así que una
+    línea con degradado de color propio insinuaría una escala compartida
+    con dolor que no existe (dolor es 0–5, cansancio/ánimo son 1–5); una
+    línea plana solo enseña la forma, no un valor comparable. Las dos
+    superposiciones posibles se distinguen entre sí por trazo, no por color
+    (cansancio discontinuo, ánimo continuo — `dashed` en
+    `lib/overlay-metrics.ts`), ya que ambas comparten el mismo gris. Solo
+    aplica en vista diaria (igual que el sombreado de ciclo): en semana/mes
+    los botones siguen ahí pero no tienen efecto, muy pocos puntos por
+    bucket como para que una superposición se lea con fiabilidad. Sin
+    tooltip propio para las líneas superpuestas todavía — son solo visuales,
+    hover sigue mostrando el valor de Dolor.
 
 ### Esquema actual de `DailyEntry` ([lib/types.ts](lib/types.ts))
 
@@ -351,12 +422,13 @@ relanzar cualquiera de los dos.
 - Mobile-first pero debe verse bien en desktop: todo el contenido va dentro
   de un contenedor `max-w-md mx-auto` (ver `PinGate.tsx`), no añadir layouts
   de desktop separados.
-- Elementos pegados al borde de la pantalla (nav inferior, dialpad del PIN)
-  usan `dvh` en vez de `vh`/`%` para la altura y `env(safe-area-inset-*)`
-  para el padding — ver `layout.tsx` (`h-dvh`, `viewportFit: "cover"`),
-  `BottomNav.tsx` y `PinGate.tsx`. Necesario para que nada quede bajo el
-  notch/home-indicator en la PWA instalada; seguir el mismo patrón en
-  cualquier pantalla nueva que toque un borde.
+- Elementos pegados al borde de la pantalla (barra superior, nav inferior,
+  dialpad del PIN) usan `dvh` en vez de `vh`/`%` para la altura y
+  `env(safe-area-inset-*)` para el padding — ver `layout.tsx` (`h-dvh`,
+  `viewportFit: "cover"`), `TopBar.tsx`, `BottomNav.tsx` y `PinGate.tsx`.
+  Necesario para que nada quede bajo el notch/home-indicator en la PWA
+  instalada; seguir el mismo patrón en cualquier pantalla nueva que toque
+  un borde.
 - Antes de dar por hecho que algo visual es un bug (colores raros, texto sin
   actualizar), verificar con Playwright + `getComputedStyle`, no solo con la
   captura: Chrome Headless Shell renderiza algunos colores con artefactos

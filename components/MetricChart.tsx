@@ -1,15 +1,22 @@
 "use client";
 
 import { useId, useMemo, useRef, useState, type PointerEvent } from "react";
-import { painLevelInfo } from "@/lib/pain-scale";
+import type { LucideIcon } from "lucide-react";
 import { buildAxisLabels, toLocalDate, tooltipDateLabel } from "@/lib/chart-axis";
 import { EVENT_META, FERTILE_SHADE_CLASS, OVULATION_META, PERIOD_SHADE_CLASS, type EventKey } from "@/lib/event-icons";
-import { smoothSegments } from "@/lib/chart-path";
+import { smoothLinePath, smoothSegments } from "@/lib/chart-path";
 import type { CountPoint, Granularity } from "@/lib/aggregate";
-import type { PainLevel } from "@/lib/types";
 
-export type PainPoint = { date: string; painLevel: PainLevel | null };
+export type MetricPoint = { date: string; value: number | null };
 export type DayEvents = { sex: boolean; activity: boolean; alcohol: boolean };
+type ValueInfo = { Icon: LucideIcon; label: string; textClass: string };
+
+// A second series drawn as a flat, de-emphasized grey line on top of the
+// primary one — normalized to its own [min, max] rather than the primary
+// series' range, since e.g. tiredness/mood (1-5) don't share pain's scale
+// (0-5). `dashed` tells two simultaneous overlays apart without needing a
+// second color (see lib/overlay-metrics.ts).
+export type OverlaySeries = { key: string; points: MetricPoint[]; range: [number, number]; dashed?: boolean };
 
 const VIEW_W = 400;
 const VIEW_H = 220;
@@ -18,7 +25,6 @@ const PAD_BOTTOM = 40;
 const PAD_X = 12;
 const PLOT_W = VIEW_W - PAD_X * 2;
 const PLOT_H = VIEW_H - PAD_TOP - PAD_BOTTOM;
-const MAX_LEVEL = 5;
 
 // Extra rows below the axis labels, one per active event type — only shown
 // for daily granularity. Weekly/monthly aggregates show the same series as
@@ -38,10 +44,23 @@ const OVERLAY_MAX_HEIGHT_RATIO = 0.4;
 const OVERLAY_GROUP_WIDTH_RATIO = 0.35; // fraction of the column width used by the group of bars
 const OVERLAY_BAR_GAP = 2;
 
+// Grey line overlays (tiredness/mood on top of Dolor) — separate from the
+// event bars above, which are boolean counts, not a continuous series.
+const OVERLAY_LINE_OPACITY = 0.55;
+const OVERLAY_LINE_WIDTH = 1.5;
+const OVERLAY_LINE_DASH = "4 3";
+const OVERLAY_LINE_CLASS = "text-neutral-400";
+
 // Ovulation marker sits in the top margin (above PAD_TOP), never over the
 // plotted line itself, regardless of that day's pain level.
 const OVULATION_ICON_SIZE = 14;
 const OVULATION_ICON_Y = 10;
+
+const GRANULARITY_SUFFIX: Record<Granularity, string> = {
+  day: "por día",
+  week: "por semana",
+  month: "por mes",
+};
 
 function isWeekend(date: string): boolean {
   const day = toLocalDate(date).getDay();
@@ -53,10 +72,6 @@ function xAt(index: number, count: number): number {
   return PAD_X + (index / (count - 1)) * PLOT_W;
 }
 
-function yAt(level: number): number {
-  return PAD_TOP + (1 - level / MAX_LEVEL) * PLOT_H;
-}
-
 // Half the width of one day's column, used to size weekend shading so it
 // covers a full day regardless of how many points are on screen.
 function dayHalfWidth(count: number): number {
@@ -64,16 +79,13 @@ function dayHalfWidth(count: number): number {
   return PLOT_W / (count - 1) / 2;
 }
 
-const ARIA_LABEL: Record<Granularity, string> = {
-  day: "Nivel de dolor por día",
-  week: "Nivel de dolor por semana",
-  month: "Nivel de dolor por mes",
-};
+type RunPoint = { x: number; y: number; value: number };
 
-type RunPoint = { x: number; y: number; level: PainLevel };
-
-export function PainChart({
+export function MetricChart({
   points,
+  range,
+  valueInfo,
+  label,
   granularity = "day",
   periodFlags,
   fertileFlags,
@@ -81,8 +93,14 @@ export function PainChart({
   dayEvents,
   bucketCounts,
   visibleSeries = new Set(),
+  overlays,
 }: {
-  points: PainPoint[];
+  points: MetricPoint[];
+  // [min, max] of this series — pain is [0, 5], tiredness/mood are [1, 5].
+  range: [number, number];
+  valueInfo: (value: number) => ValueInfo;
+  // Used for the aria-label ("Nivel de dolor por día", "Cansancio por semana"...).
+  label: string;
   granularity?: Granularity;
   // Parallel to `points`: true where that day has a registered period —
   // drawn as background shading, not gated by visibleSeries (period isn't a
@@ -101,12 +119,21 @@ export function PainChart({
   // counts drawn as translucent overlay bars instead of lanes.
   bucketCounts?: Partial<Record<EventKey, CountPoint[]>>;
   visibleSeries?: Set<EventKey>;
+  // Extra series (tiredness/mood on top of Dolor) drawn as flat grey lines —
+  // see OverlaySeries above. Not read for granularity !== "day" for the same
+  // reason period/fertile shading isn't: too few points per bucket to trust.
+  overlays?: OverlaySeries[];
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const gradientId = useId();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [min, max] = range;
 
-  const hasAnyData = points.some((p) => p.painLevel !== null);
+  function yAt(value: number): number {
+    return PAD_TOP + (1 - (value - min) / (max - min)) * PLOT_H;
+  }
+
+  const hasAnyData = points.some((p) => p.value !== null);
 
   // Runs of consecutive registered days, so a gap (unregistered day) breaks
   // the line instead of interpolating over it. A run of exactly one point
@@ -115,16 +142,37 @@ export function PainChart({
     const groups: RunPoint[][] = [];
     let current: RunPoint[] = [];
     points.forEach((p, i) => {
-      if (p.painLevel === null) {
+      if (p.value === null) {
         if (current.length > 0) groups.push(current);
         current = [];
         return;
       }
-      current.push({ x: xAt(i, points.length), y: yAt(p.painLevel), level: p.painLevel });
+      current.push({ x: xAt(i, points.length), y: yAt(p.value), value: p.value });
     });
     if (current.length > 0) groups.push(current);
     return groups;
-  }, [points]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [points, min, max]);
+
+  const overlayRuns = useMemo(() => {
+    if (granularity !== "day" || !overlays) return [];
+    return overlays.map((overlay) => {
+      const [oMin, oMax] = overlay.range;
+      const oYAt = (v: number) => PAD_TOP + (1 - (v - oMin) / (oMax - oMin)) * PLOT_H;
+      const groups: { x: number; y: number }[][] = [];
+      let current: { x: number; y: number }[] = [];
+      overlay.points.forEach((p, i) => {
+        if (p.value === null) {
+          if (current.length > 0) groups.push(current);
+          current = [];
+          return;
+        }
+        current.push({ x: xAt(i, overlay.points.length), y: oYAt(p.value) });
+      });
+      if (current.length > 0) groups.push(current);
+      return { key: overlay.key, dashed: overlay.dashed, runs: groups };
+    });
+  }, [overlays, granularity]);
 
   const axisLabels = useMemo(() => buildAxisLabels(points, granularity), [points, granularity]);
   const halfWidth = dayHalfWidth(points.length);
@@ -167,10 +215,10 @@ export function PainChart({
 
   const active = activeIndex !== null ? points[activeIndex] : null;
   const activeLabel = active ? tooltipDateLabel(active.date, granularity) : null;
-  const activeInfo = active && active.painLevel !== null ? painLevelInfo(active.painLevel) : null;
+  const activeInfo = active && active.value !== null ? valueInfo(active.value) : null;
   const activePoint =
-    activeIndex !== null && points[activeIndex].painLevel !== null
-      ? { x: xAt(activeIndex, points.length), y: yAt(points[activeIndex].painLevel), level: points[activeIndex].painLevel }
+    activeIndex !== null && points[activeIndex].value !== null
+      ? { x: xAt(activeIndex, points.length), y: yAt(points[activeIndex].value as number) }
       : null;
   const tooltipLeftPct =
     activeIndex !== null
@@ -184,7 +232,7 @@ export function PainChart({
         viewBox={`0 0 ${VIEW_W} ${totalHeight}`}
         className="w-full touch-none"
         role="img"
-        aria-label={ARIA_LABEL[granularity]}
+        aria-label={`${label} ${GRANULARITY_SUFFIX[granularity]}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={clearActive}
@@ -200,7 +248,7 @@ export function PainChart({
                 x={xAt(i, points.length) - halfWidth}
                 y={PAD_TOP}
                 width={halfWidth * 2}
-                height={yAt(0) - PAD_TOP}
+                height={yAt(min) - PAD_TOP}
                 className="fill-neutral-500/10"
               />
             );
@@ -216,7 +264,7 @@ export function PainChart({
                 x={xAt(i, points.length) - halfWidth}
                 y={PAD_TOP}
                 width={halfWidth * 2}
-                height={yAt(0) - PAD_TOP}
+                height={yAt(min) - PAD_TOP}
                 className={PERIOD_SHADE_CLASS}
               />
             );
@@ -232,7 +280,7 @@ export function PainChart({
                 x={xAt(i, points.length) - halfWidth}
                 y={PAD_TOP}
                 width={halfWidth * 2}
-                height={yAt(0) - PAD_TOP}
+                height={yAt(min) - PAD_TOP}
                 className={FERTILE_SHADE_CLASS}
               />
             );
@@ -244,7 +292,7 @@ export function PainChart({
             x1={xAt(index, points.length)}
             y1={PAD_TOP}
             x2={xAt(index, points.length)}
-            y2={yAt(0)}
+            y2={yAt(min)}
             className="stroke-neutral-800/60"
             strokeWidth={1}
           />
@@ -252,9 +300,9 @@ export function PainChart({
 
         <line
           x1={PAD_X}
-          y1={yAt(0)}
+          y1={yAt(min)}
           x2={VIEW_W - PAD_X}
-          y2={yAt(0)}
+          y2={yAt(min)}
           className="stroke-neutral-800"
           strokeWidth={1}
         />
@@ -264,7 +312,7 @@ export function PainChart({
             x1={xAt(activeIndex, points.length)}
             y1={PAD_TOP}
             x2={xAt(activeIndex, points.length)}
-            y2={yAt(0)}
+            y2={yAt(min)}
             className="stroke-neutral-600"
             strokeWidth={1}
           />
@@ -290,7 +338,7 @@ export function PainChart({
                     <rect
                       key={`overlay-${key}-${p.date}`}
                       x={x}
-                      y={yAt(0) - h}
+                      y={yAt(min) - h}
                       width={barWidth}
                       height={h}
                       rx={0.75}
@@ -305,6 +353,27 @@ export function PainChart({
           });
         })()}
 
+        {overlayRuns.map(({ key, dashed, runs: oRuns }) => (
+          <g key={`overlay-line-${key}`} className={OVERLAY_LINE_CLASS} opacity={OVERLAY_LINE_OPACITY}>
+            {oRuns.map((run, ri) =>
+              run.length === 1 ? (
+                <circle key={`overlay-solo-${key}-${ri}`} cx={run[0].x} cy={run[0].y} r={2} fill="currentColor" />
+              ) : (
+                <path
+                  key={`overlay-path-${key}-${ri}`}
+                  d={smoothLinePath(run)}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={OVERLAY_LINE_WIDTH}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeDasharray={dashed ? OVERLAY_LINE_DASH : undefined}
+                />
+              ),
+            )}
+          </g>
+        ))}
+
         {runs.map((run, ri) =>
           run.length === 1 ? (
             <circle
@@ -312,7 +381,7 @@ export function PainChart({
               cx={run[0].x}
               cy={run[0].y}
               r={2.5}
-              className={painLevelInfo(run[0].level).textClass}
+              className={valueInfo(run[0].value).textClass}
               fill="currentColor"
               stroke="var(--background)"
               strokeWidth={1.25}
@@ -320,8 +389,8 @@ export function PainChart({
           ) : (
             smoothSegments(run).map((seg, si) => {
               const id = `${gradientId}-${ri}-${si}`;
-              const fromInfo = painLevelInfo(run[si].level);
-              const toInfo = painLevelInfo(run[si + 1].level);
+              const fromInfo = valueInfo(run[si].value);
+              const toInfo = valueInfo(run[si + 1].value);
               return (
                 <g key={id}>
                   <linearGradient
@@ -354,7 +423,7 @@ export function PainChart({
             cx={activePoint.x}
             cy={activePoint.y}
             r={3.5}
-            className={painLevelInfo(activePoint.level).textClass}
+            className={valueInfo(points[activeIndex as number].value as number).textClass}
             fill="currentColor"
             stroke="var(--background)"
             strokeWidth={1.25}

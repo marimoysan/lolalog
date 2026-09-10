@@ -17,3 +17,7 @@ export const MOOD_LEVELS: {
   { level: 4, Icon: Smile, label: "Bien", textClass: "text-yellow-600", bgClass: "bg-yellow-500/20" },
   { level: 5, Icon: Laugh, label: "Muy bien", textClass: "text-green-600", bgClass: "bg-green-500/15" },
 ];
+
+export function moodLevelInfo(level: ScaleLevel) {
+  return MOOD_LEVELS.find((l) => l.level === level)!;
+}
