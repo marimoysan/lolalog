@@ -300,7 +300,7 @@ export function LogForm({ date, isToday }: { date: string; isToday: boolean }) {
       </Field>
 
       <Field label="Cansancio">
-        <ScaleInput value={tiredness} onChange={setTiredness} ariaLabelPrefix="Cansancio" />
+        <ScaleInput value={tiredness} onChange={setTiredness} ariaLabelPrefix="Cansancio" allowNull />
       </Field>
 
       <Field label="Ánimo">

@@ -7,11 +7,11 @@ import type { ScaleLevel } from "@/lib/types";
 // same convention instead of inventing a new severity palette just for it.
 // Every level shares one textClass, only the tooltip label changes.
 const LABELS: Record<ScaleLevel, string> = {
-  1: "Muy descansada",
-  2: "Descansada",
-  3: "Normal",
-  4: "Cansada",
-  5: "Muy cansada",
+  1: "Algo cansada",
+  2: "Cansada",
+  3: "Bastante cansada",
+  4: "Muy cansada",
+  5: "KO",
 };
 
 const TIREDNESS_ICON: LucideIcon = BatteryLow;

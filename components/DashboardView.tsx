@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import type { LucideIcon } from "lucide-react";
 import { ChoiceGroup } from "@/components/ChoiceGroup";
@@ -76,6 +76,11 @@ export function DashboardView() {
   const [granularity, setGranularity] = useState<Granularity>("day");
   const [visibleSeries, setVisibleSeries] = useState<Set<EventKey>>(new Set());
   const [visibleOverlays, setVisibleOverlays] = useState<Set<OverlayMetricKey>>(new Set());
+  // Shared crosshair index for Dolor/Cansancio/Ánimo — the three charts are
+  // built from the same `dates`/buckets, so one index lines up across all
+  // three. Dragging on any of them moves the line on the other two, as if
+  // one vertical line ran through all three plots.
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   function toggleSeries(key: EventKey) {
     setVisibleSeries((prev) => {
@@ -109,6 +114,12 @@ export function DashboardView() {
         : [appliedCustom.end, appliedCustom.start];
     return datesInRange(start, end).slice(0, MAX_CUSTOM_DAYS);
   }, [preset, appliedCustom]);
+
+  // Index no longer lines up (or no longer means "hovering") once the
+  // x-axis itself changes — different range or different bucketing.
+  useEffect(() => {
+    setActiveIndex(null);
+  }, [dates, granularity]);
 
   const chartData = useMemo(() => {
     if (granularity === "day") {
@@ -285,6 +296,8 @@ export function DashboardView() {
           bucketCounts={chartData.bucketCounts}
           visibleSeries={visibleSeries}
           overlays={painOverlays}
+          activeIndex={activeIndex}
+          onActiveIndexChange={setActiveIndex}
         />
       </div>
 
@@ -296,6 +309,8 @@ export function DashboardView() {
           valueInfo={tirednessValueInfo}
           label="Cansancio"
           granularity={granularity}
+          activeIndex={activeIndex}
+          onActiveIndexChange={setActiveIndex}
         />
       </div>
 
@@ -307,6 +322,8 @@ export function DashboardView() {
           valueInfo={moodValueInfo}
           label="Ánimo"
           granularity={granularity}
+          activeIndex={activeIndex}
+          onActiveIndexChange={setActiveIndex}
         />
       </div>
 

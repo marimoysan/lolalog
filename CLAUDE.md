@@ -148,7 +148,17 @@ mismo Dashboard.
   interpola por encima; probado lo contrario y revertido a petición
   explícita). Arrastrar sobre cualquiera de las tres gráficas (mouse o
   touch, vía Pointer Events) muestra un crosshair + tooltip con la fecha y
-  el valor (o "Sin registrar").
+  el valor (o "Sin registrar") — y ese mismo índice se refleja en las otras
+  dos, como si una única línea vertical atravesase las tres a la vez (cada
+  una con su propio tooltip para esa fecha). El índice activo vive en
+  `DashboardView` (`activeIndex`/`setActiveIndex`), no en cada gráfica —
+  `MetricChart` acepta `activeIndex`/`onActiveIndexChange` opcionales para
+  este caso (controlado) y cae a un `useState` propio si no se pasan
+  (usado en cualquier otro sitio donde se monte una sola gráfica suelta).
+  Funciona porque las tres comparten exactamente el mismo `dates`/buckets,
+  así que un mismo índice numérico apunta al mismo día en las tres; se
+  resetea a `null` en cuanto cambia el rango o la granularidad, para no
+  apuntar a un día que ya no está en el eje.
   - **Eje X**: sombreado de fondo en columnas de sábado/domingo (solo en
     vista diaria), gridline vertical en cada tick etiquetado, más ticks que
     una gráfica genérica (todos los días/semanas/meses si hay ≤10 puntos,
@@ -356,11 +366,16 @@ ahí, no en cada sitio donde se lee el campo) la próxima vez que se amplíe
   cansancio, intensidad de deporte). Deliberadamente distinta visualmente de
   `PainScale`. Prop opcional `allowNull` añade una píldora "NA" que llama a
   `onChange(null)`, para permitir borrar/marcar como no aplicable un campo ya
-  respondido — de momento sin ningún campo activándola (queda disponible
-  para el próximo campo 1-5 que la necesite).
+  respondido — activada en Cansancio (labels "Algo cansada" → "KO" en
+  [lib/tiredness-scale.ts](lib/tiredness-scale.ts), usadas también por el
+  tooltip del Dashboard); Actividad sigue sin ella.
 - [MoodScale.tsx](components/MoodScale.tsx): caras 1-5 para "Ánimo", mismo
   patrón que `PainScale.tsx` (ver arriba, colores por `lib/mood-scale.ts`)
-  pero con la escala invertida.
+  pero con la escala invertida — y, a diferencia de dolor, no del todo
+  simétrica: 1-2 van rojo/naranja como el extremo alto de dolor, pero el
+  centro (3) es amarillo, no ámbar, y 4-5 son verde claro → verde más
+  vivo en vez de un único verde repetido, para que la mitad "buena" de la
+  escala se distinga de un vistazo en vez de leerse como un solo tono.
 - [ChoiceGroup.tsx](components/ChoiceGroup.tsx): single-select genérico de N
   opciones string (Sí/No, cantidad, calidad de comida).
 - [TagCloud.tsx](components/TagCloud.tsx): multiselect genérico de chips

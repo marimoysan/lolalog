@@ -94,6 +94,8 @@ export function MetricChart({
   bucketCounts,
   visibleSeries = new Set(),
   overlays,
+  activeIndex: controlledActiveIndex,
+  onActiveIndexChange,
 }: {
   points: MetricPoint[];
   // [min, max] of this series — pain is [0, 5], tiredness/mood are [1, 5].
@@ -123,10 +125,18 @@ export function MetricChart({
   // see OverlaySeries above. Not read for granularity !== "day" for the same
   // reason period/fertile shading isn't: too few points per bucket to trust.
   overlays?: OverlaySeries[];
+  // Lets a parent sync the hover/drag crosshair across several MetricChart
+  // instances sharing the same x-axis (Dolor/Cansancio/Ánimo on the
+  // Dashboard, all built from the same `dates`/buckets so indices line up)
+  // — falls back to its own local state when omitted.
+  activeIndex?: number | null;
+  onActiveIndexChange?: (index: number | null) => void;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const gradientId = useId();
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [localActiveIndex, setLocalActiveIndex] = useState<number | null>(null);
+  const activeIndex = controlledActiveIndex !== undefined ? controlledActiveIndex : localActiveIndex;
+  const setActiveIndex = onActiveIndexChange ?? setLocalActiveIndex;
   const [min, max] = range;
 
   function yAt(value: number): number {
